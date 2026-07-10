@@ -1,71 +1,334 @@
-# OpenSya Persistence
+---
+seo:
+  title: OpenSya Persistence
+  description: A metadata-driven persistence engine for TypeScript applications.
+---
 
-OpenSya Persistence is a metadata-driven persistence engine for TypeScript applications.
+::u-page-hero{orientation="horizontal"}
+#title
+Execute your [domain]{.text-primary}.
 
-It sits between application code and the database adapter and provides a consistent runtime for domain-oriented data operations: validation, lifecycle hooks, relation loading, transactions, and safe mutations.
+#description
+OpenSya Persistence is a metadata-driven persistence engine that orchestrates validation, relationships, lifecycle hooks, and transactions while keeping your application independent from the underlying database.
 
-```text
-Application
-    |
-    v
-Query Engine
-    |
-    +-- Metadata Registry
-    +-- Validators
-    +-- Lifecycle Hooks
-    +-- Relation Resolver
-    |
-    v
-Database Adapter
-    |
-    v
-Database
-```
+#links
+  :::u-button
+  ---
+  label: Get started
+  to: /getting-started
+  size: xl
+  trailing-icon: i-tabler-arrow-right
+  ---
+  :::
 
-Persistence does not replace an ORM. The ORM remains responsible for communicating with the database. Persistence coordinates the rules that must run around database operations.
+  :::u-button
+  ---
+  label: View on GitHub
+  to: https://github.com/opensya/persistence
+  target: _blank
+  color: neutral
+  variant: outline
+  size: xl
+  icon: i-tabler-brand-github
+  ---
+  :::
 
-## Core principles
+#default
+  :::prose-pre
+  ---
+  code: |
+    const registry = createMetadataRegistry()
 
-### Metadata is the source of truth
+    registry.register(users)
+    registry.lock()
 
-Tables, columns, validation rules, and relations are described using `TableMetadata`. The same metadata is used by the registry, query engine, relation resolver, and adapter.
+    const adapter = createDrizzleAdapter(db)
 
-### Domain operations are executed consistently
+    for (const table of registry.getAll()) {
+      adapter.buildTable(table)
+    }
 
-Create, update, and delete operations go through a predictable pipeline:
+    const engine = createQueryEngine(registry, adapter)
 
-1. start a transaction;
-2. apply defaults;
-3. execute before hooks;
-4. validate the entity;
-5. execute the database mutation;
-6. execute after hooks;
-7. commit or roll back the transaction.
+    await engine.create('users', {
+      email: 'john@example.com'
+    })
+  filename: persistence.ts
+  ---
+  ```ts
+  const registry = createMetadataRegistry()
 
-### Mutations are safe by default
+  registry.register(users)
+  registry.lock()
 
-Update and delete operations require a non-empty filter. Accidental unbounded mutations are rejected with `UnsafeMutationError`.
+  const adapter = createDrizzleAdapter(db)
 
-### The database is behind an adapter
+  for (const table of registry.getAll()) {
+    adapter.buildTable(table)
+  }
 
-The query engine depends on the `DatabaseAdapter` interface rather than a specific database library. A PostgreSQL adapter powered by Drizzle is currently included.
+  const engine = createQueryEngine(registry, adapter)
 
-## Main components
+  await engine.create('users', {
+    email: 'john@example.com'
+  })
+  ```
+  :::
+::
 
-| Component | Responsibility |
-| --- | --- |
-| `MetadataRegistry` | Registers, validates, and locks the application schema |
-| `QueryEngine` | Executes reads and transactional mutations |
-| `HooksRegistry` | Registers and runs lifecycle hooks |
-| `RelationResolver` | Loads declared relations in batches |
-| `DatabaseAdapter` | Defines the database-independent persistence contract |
-| `DrizzleAdapter` | Implements the contract with Drizzle and PostgreSQL |
-| `ConsistencyChecker` | Compares declared metadata with an introspected schema |
+::u-page-section
+#title
+More than database access
 
-## Documentation
+#description
+Your ORM communicates with the database. OpenSya Persistence gives it a runtime for executing domain rules consistently.
 
-Start with [Getting started](./getting-started.md), then explore the [architecture](./concepts/architecture.md) and the focused guides in the [documentation summary](./SUMMARY.md).
+#features
+  :::u-page-feature
+  ---
+  icon: i-tabler-schema
+  ---
+  #title
+  Metadata-driven schema
 
-## Project status
+  #description
+  Describe tables, columns, validation rules, and relations once through a database-independent metadata model.
+  :::
 
-OpenSya Persistence is currently at version `0.0.1`. Its public API is usable, but some capabilities remain under development. Review [Current limitations](./current-limitations.md) before using it in production.
+  :::u-page-feature
+  ---
+  icon: i-tabler-shield-check
+  ---
+  #title
+  Safe mutations
+
+  #description
+  Update and delete operations require explicit filters, preventing accidental unbounded mutations.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-checkup-list
+  ---
+  #title
+  Built-in validation
+
+  #description
+  Combine structural checks with synchronous or asynchronous field and table validators.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-arrows-split
+  ---
+  #title
+  Lifecycle hooks
+
+  #description
+  Transform data and execute application behavior before and after create, update, and delete operations.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-link
+  ---
+  #title
+  Relationship resolver
+
+  #description
+  Populate one-to-one, one-to-many, many-to-one, and many-to-many relations through batched queries.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-transaction-dollar
+  ---
+  #title
+  Automatic transactions
+
+  #description
+  Mutations, validation, and lifecycle hooks execute inside the same adapter transaction.
+  :::
+::
+
+::u-page-section
+#title
+One runtime, replaceable adapters
+
+#description
+The Query Engine depends on a small database adapter contract. Use the built-in Drizzle PostgreSQL adapter today or implement another adapter for your own infrastructure.
+
+#links
+  :::u-button
+  ---
+  label: Explore the architecture
+  to: /concepts/architecture
+  color: neutral
+  variant: subtle
+  size: lg
+  trailing-icon: i-tabler-arrow-right
+  ---
+  :::
+
+#features
+  :::u-page-feature
+  ---
+  icon: i-tabler-engine
+  ---
+  #title
+  Query Engine
+
+  #description
+  A single API coordinates reads, relation population, defaults, validation, hooks, and transactional mutations.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-database-cog
+  ---
+  #title
+  Adapter architecture
+
+  #description
+  Persistence targets the DatabaseAdapter interface instead of coupling domain operations to a specific ORM.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-brand-typescript
+  ---
+  #title
+  TypeScript first
+
+  #description
+  The public API, metadata contracts, filters, hooks, and custom adapter interfaces are fully typed.
+  :::
+::
+
+::u-page-section
+#title
+A predictable mutation pipeline
+
+#description
+Every mutation follows the same execution order so domain rules cannot be accidentally bypassed.
+
+::u-steps{level="3"}
+### Apply defaults
+Missing values declared in column metadata are resolved before validation.
+
+### Run before hooks
+Registered hooks can normalize, enrich, authorize, or reject the incoming mutation.
+
+### Validate the entity
+Structural rules, field validators, and cross-field table validators run before writing.
+
+### Execute the mutation
+The transaction-scoped adapter inserts, updates, or deletes the targeted records.
+
+### Run after hooks
+Post-mutation behavior executes before the transaction is committed.
+::
+
+::u-callout
+---
+icon: i-tabler-shield-lock
+color: primary
+variant: subtle
+title: Safe by default
+---
+An update or delete without a non-empty filter is rejected with `UnsafeMutationError`.
+::
+
+#links
+  :::u-button
+  ---
+  label: Learn about validation
+  to: /guides/validation
+  color: neutral
+  variant: outline
+  trailing-icon: i-tabler-arrow-right
+  ---
+  :::
+
+  :::u-button
+  ---
+  label: Explore lifecycle hooks
+  to: /guides/lifecycle-hooks
+  color: neutral
+  variant: outline
+  trailing-icon: i-tabler-arrow-right
+  ---
+  :::
+::
+
+::u-page-section
+#title
+Explore the documentation
+
+#features
+  :::u-page-feature
+  ---
+  icon: i-tabler-rocket
+  to: /getting-started
+  ---
+  #title
+  Getting started
+
+  #description
+  Install the package, declare metadata, initialize the registry, and execute your first query.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-binary-tree
+  to: /concepts/metadata-and-registry
+  ---
+  #title
+  Metadata and registry
+
+  #description
+  Understand the schema model, supported column types, defaults, and startup validation.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-filter
+  to: /guides/queries-and-filters
+  ---
+  #title
+  Queries and filters
+
+  #description
+  Build nested filters, order results, paginate queries, and perform safe mutations.
+  :::
+
+  :::u-page-feature
+  ---
+  icon: i-tabler-plug-connected
+  to: /adapters/drizzle
+  ---
+  #title
+  Drizzle adapter
+
+  #description
+  Connect the Query Engine to PostgreSQL through the built-in Drizzle adapter.
+  :::
+::
+
+::u-page-section
+  :::u-page-c-t-a
+  ---
+  title: Ready to execute your domain?
+  description: Build a consistent persistence layer with metadata, validation, hooks, relationships, and transactions.
+  links:
+    - label: Get started
+      to: /getting-started
+      trailingIcon: i-tabler-arrow-right
+    - label: View on GitHub
+      to: https://github.com/opensya/persistence
+      target: _blank
+      variant: subtle
+      icon: i-tabler-brand-github
+  ---
+  :::
+::
