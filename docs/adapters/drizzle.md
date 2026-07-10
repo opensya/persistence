@@ -1,40 +1,13 @@
 ---
 title: Drizzle adapter
-description: Connect OpenSya Persistence to PostgreSQL through Drizzle ORM.
+description: PostgreSQL query execution, runtime table construction, transactions, and schema introspection.
 navigation:
-  icon: i-tabler-brand-drizzle
+  icon: i-tabler-database-cog
 ---
 
-The built-in `DrizzleAdapter` implements the database-independent adapter contract for PostgreSQL with Drizzle ORM.
+`DrizzleAdapter` implements `DatabaseAdapter` for Drizzle's asynchronous PostgreSQL database.
 
-## Installation
-
-::u-tabs
-  :::u-tab{label="pnpm" icon="i-tabler-package"}
-  ```bash
-  pnpm add @opensya/persistence drizzle-orm pg
-  pnpm add -D @types/pg
-  ```
-  :::
-
-  :::u-tab{label="Yarn" icon="i-tabler-package"}
-  ```bash
-  yarn add @opensya/persistence drizzle-orm pg
-  yarn add -D @types/pg
-  ```
-  :::
-::
-
-::u-callout
----
-icon: i-tabler-info-circle
-color: info
-variant: subtle
----
-The package currently declares `drizzle-orm@1.0.0-beta.22` as a peer dependency.
-::
-
-## Create the adapter
+## Create an adapter
 
 ```ts
 import { createDrizzleAdapter } from '@opensya/persistence'
@@ -42,137 +15,159 @@ import { createDrizzleAdapter } from '@opensya/persistence'
 const adapter = createDrizzleAdapter(db)
 ```
 
-The `db` argument must be an asynchronous Drizzle PostgreSQL database with transaction support.
+The database must support Drizzle's select, insert, update, delete, execute, and transaction APIs.
 
-## Build runtime tables
+## Runtime tables
 
 ```ts
-for (const table of registry.getAll()) {
-  adapter.buildTable(table)
+for (const metadata of registry.getAll()) {
+  adapter.buildTable(metadata)
 }
 ```
 
-::u-callout
----
-icon: i-tabler-database-exclamation
-color: warning
-variant: subtle
-title: Build before querying
----
-Every registered table must be built during startup. Otherwise, the adapter rejects queries for that table.
-::
-
-`buildTable()` creates runtime Drizzle objects. It does not execute DDL, create migrations, or synchronize PostgreSQL.
-
-## Column mapping
-
-| Metadata type | Drizzle PostgreSQL builder |
-| --- | --- |
-| `uuid` | `uuid` |
-| `string`, `text` | `text` |
-| `integer` | `integer` |
-| `bigint` | `bigint({ mode: "bigint" })` |
-| `boolean` | `boolean` |
-| `timestamp` | `timestamp` |
-| `date` | `date` |
-| `json` | `json` |
-| `decimal` | `numeric` |
-
-## Constraint mapping
-
-::u-page-grid
-  ::u-page-card{title="Primary key" description="primaryKey maps to .primaryKey()." icon="i-tabler-key"}
-  ::
-  ::u-page-card{title="Required" description="nullable: false maps to .notNull()." icon="i-tabler-asterisk"}
-  ::
-  ::u-page-card{title="Unique" description="unique: true maps to .unique()." icon="i-tabler-number-1"}
-  ::
-  ::u-page-card{title="Defaults" description="Values use .default(); factories use .$defaultFn()." icon="i-tabler-wand"}
-  ::
-::
-
-## Transactions
-
-```ts
-await adapter.transaction(async transactionAdapter => {
-  await transactionAdapter.insert('users', user)
-  await transactionAdapter.insert('profiles', profile)
-})
-```
-
-The transaction-scoped adapter reuses the runtime table map built during startup.
-
-## Direct adapter usage
-
-```ts
-const users = await adapter.findMany('users', {
-  where: {
-    conditions: [
-      { field: 'active', operator: 'eq', value: true }
-    ]
-  }
-})
-```
+`buildTable()` converts each `TableMetadata` into a Drizzle `pgTable` and indexes it by the logical metadata name.
 
 ::u-callout
 ---
 icon: i-tabler-alert-triangle
 color: warning
 variant: subtle
-title: Prefer the Query Engine
 ---
-Direct adapter calls do not run metadata validators or lifecycle hooks. Use the Query Engine for application mutations.
+Query operations fail when the logical table has not been built. Runtime table construction does not execute DDL or migrations.
 ::
 
-The adapter still enforces:
+## Column mapping
 
-::u-accordion
-  :::u-accordion-item{label="Known fields" icon="i-tabler-columns"}
-  Filters, ordering, inserts, and update patches must reference built fields.
-  :::
+| Metadata | PostgreSQL builder | Runtime validation |
+| --- | --- | --- |
+| `uuid` | `uuid` | string |
+| `string` | `text` | string |
+| `text` | `text` | string |
+| `integer` | `integer` | integer number |
+| `bigint` | `bigint({ mode: 'bigint' })` | bigint |
+| `boolean` | `boolean` | boolean |
+| `timestamp` | `timestamp` | Date |
+| `date` | `date` | string |
+| `json` | `json` | any value |
+| `decimal` | `numeric` | string or number |
 
-  :::u-accordion-item{label="Valid pagination" icon="i-tabler-list-numbers"}
-  Negative limits and offsets are rejected.
-  :::
+The adapter maps primary keys, nullability, uniqueness, and static or factory defaults to the corresponding Drizzle builder methods.
 
-  :::u-accordion-item{label="Valid collection operators" icon="i-tabler-list-check"}
-  `in` and `notIn` require non-empty array values.
-  :::
+## Query translation
 
-  :::u-accordion-item{label="Safe mutations" icon="i-tabler-shield-check"}
-  Direct update and delete operations also require a non-empty filter.
-  :::
+The adapter compiles `QueryFilter` recursively:
+
+- conditions at the same level are joined with `AND`;
+- nested `and` groups use Drizzle `and()`;
+- nested `or` groups use `or()`;
+- `not` wraps the compiled nested expression;
+- operators map to `eq`, `ne`, `inArray`, `notInArray`, comparisons, `isNull`, and `isNotNull`.
+
+```ts
+await adapter.findMany('users', {
+  where: {
+    and: [
+      {
+        conditions: [
+          { field: 'active', operator: 'eq', value: true }
+        ]
+      },
+      {
+        or: [
+          {
+            conditions: [
+              { field: 'role', operator: 'eq', value: 'admin' }
+            ]
+          },
+          {
+            conditions: [
+              { field: 'role', operator: 'eq', value: 'owner' }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  orderBy: [{ field: 'createdAt', direction: 'desc' }],
+  limit: 20,
+  offset: 0
+})
+```
+
+## Adapter-level guards
+
+Before executing SQL, the adapter verifies:
+
+- filter, sort, insert, and update fields exist on the built table;
+- `limit` and `offset` are not negative;
+- `in` and `notIn` receive non-empty arrays;
+- update and delete filters contain at least one effective constraint.
+
+These checks also apply when the adapter is used directly. Direct calls do not, however, run Query Engine validators or lifecycle hooks.
+
+## Transactions
+
+```ts
+await adapter.transaction(async tx => {
+  const user = await tx.insert('users', input)
+
+  await tx.insert('profiles', {
+    id: crypto.randomUUID(),
+    userId: user.id
+  })
+})
+```
+
+The callback receives a new adapter bound to the Drizzle transaction while sharing the previously built table map.
+
+## PostgreSQL introspection
+
+```ts
+const actualSchema = await adapter.introspect()
+```
+
+The adapter queries `information_schema` directly. Introspection does not depend on the tables previously passed to `buildTable()`.
+
+::u-steps{level="3"}
+### Discover tables
+Reads base tables from `information_schema.tables` where `table_schema = 'public'`.
+
+### Discover columns
+Reads column name, SQL data type, nullability, and ordinal position from `information_schema.columns`.
+
+### Discover primary keys
+Joins `table_constraints` and `key_column_usage` for each table.
+
+### Produce metadata
+Returns `TableMetadata[]` with physical names used as both logical and collection names.
 ::
 
-## Introspection
+## Introspected SQL types
+
+| PostgreSQL `data_type` | Metadata type |
+| --- | --- |
+| `uuid` | `uuid` |
+| `character varying` | `string` |
+| `text` | `text` |
+| `integer` | `integer` |
+| `bigint` | `bigint` |
+| `boolean` | `boolean` |
+| timestamp with or without time zone | `timestamp` |
+| `date` | `date` |
+| `json`, `jsonb` | `json` |
+| `numeric` | `decimal` |
+| any unrecognized type | `text` |
 
 ::u-callout
 ---
-icon: i-tabler-tool
-color: error
+icon: i-tabler-info-circle
+color: info
 variant: subtle
-title: Not implemented in version 0.0.1
+title: Introspection boundaries
 ---
-`DrizzleAdapter.introspect()` currently throws `PostgreSQL introspection is not implemented yet.`
+Unique constraints are currently returned as `unique: false`. Foreign keys and relations are returned as empty arrays. Defaults and custom validators are not introspected. Unknown SQL types deliberately fall back to `text` so consistency checking reports drift instead of crashing.
 ::
 
-Consequently, `ConsistencyChecker.check()` cannot yet run with the built-in adapter.
+## When to use the adapter directly
 
-## Custom adapters
-
-Implement `DatabaseAdapter` to support another database or ORM:
-
-```ts
-import type {
-  DatabaseAdapter,
-  QueryFilter,
-  QueryParams,
-  TableMetadata
-} from '@opensya/persistence'
-
-export class CustomAdapter implements DatabaseAdapter {
-  // Implement the complete adapter contract.
-}
-```
-
-Custom adapters should provide real transactional semantics and preserve the built-in mutation safety guarantees.
+Use `QueryEngine` for domain operations. Use the adapter directly for infrastructure code that intentionally needs lower-level access, such as schema inspection or transaction-scoped operations inside hooks.
