@@ -1,173 +1,113 @@
 ---
 title: Architecture
-description: Understand how OpenSya Persistence separates domain execution from database access.
+description: How metadata, execution services, and database adapters work together.
 navigation:
   icon: i-tabler-sitemap
 ---
 
-OpenSya Persistence is organized around a small set of components with explicit responsibilities.
+OpenSya Persistence separates the description of a data model from the execution of database operations.
 
-::u-callout
----
-icon: i-tabler-bulb
-color: primary
-variant: subtle
-title: Core idea
----
-Application services talk to the Query Engine. The Query Engine coordinates domain rules and delegates database operations to an adapter.
-::
-
-## Runtime layers
-
-::u-page-grid
-  ::u-page-card
-  ---
-  icon: i-tabler-apps
-  title: Application services
-  description: Express use cases and invoke persistence operations.
-  spotlight: true
-  ---
-  ::
-
-  ::u-page-card
-  ---
-  icon: i-tabler-engine
-  title: Query Engine
-  description: Coordinates reads, validation, hooks, relations, and mutations.
-  spotlight: true
-  ---
-  ::
-
-  ::u-page-card
-  ---
-  icon: i-tabler-schema
-  title: Metadata Registry
-  description: Stores and validates the declared persistence model.
-  spotlight: true
-  ---
-  ::
-
-  ::u-page-card
-  ---
-  icon: i-tabler-plug-connected
-  title: Database Adapter
-  description: Translates generic operations into database-specific queries.
-  spotlight: true
-  ---
-  ::
-::
+## Runtime overview
 
 ```text
-Application services
+Application service
         │
         ▼
     QueryEngine
-        │
-        ├───────────────┐
-        ▼               ▼
-MetadataRegistry   HooksRegistry
-        │
-        ▼
- RelationResolver
-        │
-        ▼
- DatabaseAdapter
-        │
-        ▼
-     Database
+   ┌────┼──────────────┐
+   ▼    ▼              ▼
+Registry Hooks   RelationResolver
+        │              │
+        └──────┬───────┘
+               ▼
+       DatabaseAdapter
+               │
+               ▼
+            Database
 ```
 
-## Component responsibilities
+## Components
 
 ::u-accordion
-  :::u-accordion-item{label="Metadata layer" icon="i-tabler-schema"}
-  A `TableMetadata` describes the logical name, physical collection, columns, relations, field validators, and table validators. The `MetadataRegistry` checks the schema before the application begins serving requests.
+  :::u-accordion-item{label="MetadataRegistry" icon="i-tabler-schema"}
+  Stores `TableMetadata`, rejects duplicate logical names, validates the complete schema, and becomes immutable after `lock()`.
   :::
 
-  :::u-accordion-item{label="Query layer" icon="i-tabler-engine"}
-  The `QueryEngine` is the application-facing API. It coordinates table lookup, defaults, lifecycle hooks, validation, transactions, safe mutations, and explicit relation population.
+  :::u-accordion-item{label="QueryEngine" icon="i-tabler-engine"}
+  Provides application-facing reads and mutations. It coordinates defaults, hooks, validation, transactions, safe targeting, and relation population.
   :::
 
-  :::u-accordion-item{label="Relation layer" icon="i-tabler-link"}
-  The `RelationResolver` uses declared metadata to load direct relations in batches and attach them to returned entities.
+  :::u-accordion-item{label="HooksRegistry" icon="i-tabler-arrows-split"}
+  Stores ordered callbacks for create, update, and delete operations. Before hooks may transform data; after hooks run before the transaction commits.
   :::
 
-  :::u-accordion-item{label="Adapter layer" icon="i-tabler-database-cog"}
-  The `DatabaseAdapter` contract isolates the engine from a specific ORM. The built-in implementation uses Drizzle and PostgreSQL.
+  :::u-accordion-item{label="RelationResolver" icon="i-tabler-link"}
+  Resolves explicitly requested direct relations by batching key values and grouping related rows in memory.
+  :::
+
+  :::u-accordion-item{label="DatabaseAdapter" icon="i-tabler-database-cog"}
+  Defines the storage contract: reads, inserts, updates, deletes, transactions, runtime table construction, and schema introspection.
+  :::
+
+  :::u-accordion-item{label="ConsistencyChecker" icon="i-tabler-database-search"}
+  Compares declared metadata with the schema returned by `DatabaseAdapter.introspect()`.
   :::
 ::
 
-## Mutation pipelines
+## Read path
+
+::u-steps{level="3"}
+### Resolve table metadata
+Unknown logical table names fail through `registry.getOrThrow()`.
+
+### Query the adapter
+The engine forwards filters, sorting, limit, and offset.
+
+### Populate requested relations
+When `populate` is present, the resolver loads each named direct relation.
+
+### Return typed data
+The generic return type is supplied by the caller; it is not inferred from metadata.
+::
+
+Reads do not run lifecycle hooks and are not automatically transactional.
+
+## Mutation path
 
 ::u-tabs
   :::u-tab{label="Create" icon="i-tabler-plus"}
-  ::u-steps{level="4"}
-  #### Start a transaction
-  #### Apply metadata defaults
-  #### Run before-create hooks
-  #### Verify fields and validate the entity
-  #### Insert through the transaction adapter
-  #### Run after-create hooks
-  #### Commit or roll back
-  ::
+  Defaults → before hooks → known-field check → complete validation → insert → after hooks.
   :::
 
   :::u-tab{label="Update" icon="i-tabler-edit"}
-  ::u-steps{level="4"}
-  #### Reject an empty filter
-  #### Start a transaction and load current rows
-  #### Run before-update hooks
-  #### Merge the patch and validate affected fields
-  #### Update through the transaction adapter
-  #### Run after-update hooks
-  #### Commit or roll back
-  ::
+  Safe-filter check → load current rows → before hooks → merge and validate touched fields → update → after hooks.
   :::
 
   :::u-tab{label="Delete" icon="i-tabler-trash"}
-  ::u-steps{level="4"}
-  #### Reject an empty filter
-  #### Start a transaction
-  #### Resolve the target for `deleteOne()`
-  #### Run before-delete hooks
-  #### Delete through the transaction adapter
-  #### Run after-delete hooks
-  #### Commit or roll back
-  ::
+  Safe-filter check → resolve target when needed → before hooks → delete → after hooks.
   :::
 ::
 
-## Logical and physical names
+All mutation steps execute inside `adapter.transaction()`.
 
-| Metadata property | Purpose | Example |
+## Logical and physical identifiers
+
+| Property | Used by | Example |
 | --- | --- | --- |
-| `TableMetadata.name` | Logical identifier used by the engine | `users` |
-| `TableMetadata.collectionName` | Physical PostgreSQL table | `app_users` |
-| `ColumnMetadata.name` | Entity and filter field | `createdAt` |
-| `ColumnMetadata.columnName` | Physical database column | `created_at` |
+| `TableMetadata.name` | Engine and adapter lookup | `users` |
+| `TableMetadata.collectionName` | Physical table construction and consistency matching | `app_users` |
+| `ColumnMetadata.name` | Entities, filters, and sorting | `createdAt` |
+| `ColumnMetadata.columnName` | PostgreSQL column construction and consistency matching | `created_at` |
+
+## Adapter independence
+
+The Query Engine does not import Drizzle types. A custom adapter can target another store if it preserves the contract and semantics.
 
 ::u-callout
 ---
-icon: i-tabler-arrows-exchange
-color: info
+icon: i-tabler-shield-check
+color: primary
 variant: subtle
 ---
-The separation keeps application naming stable while allowing the physical database to follow another naming convention.
+A custom adapter should preserve non-empty mutation filters, field validation, transactional callbacks, predictable return values, and read-only introspection.
 ::
-
-## Adapter contract
-
-A database adapter implements:
-
-::u-page-grid
-  ::u-page-card{title="Reads" description="findMany and findOne" icon="i-tabler-search"}
-  ::
-  ::u-page-card{title="Mutations" description="insert, update, and delete" icon="i-tabler-pencil"}
-  ::
-  ::u-page-card{title="Transactions" description="transaction-scoped operations" icon="i-tabler-arrows-transfer-up"}
-  ::
-  ::u-page-card{title="Schema" description="buildTable and introspect" icon="i-tabler-database"}
-  ::
-::
-
-Custom adapters should preserve the built-in safety guarantees: field verification, non-empty mutation filters, transactional callbacks, and consistent return values.
