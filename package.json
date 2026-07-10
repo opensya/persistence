@@ -1,7 +1,7 @@
 {
-  "name": "@opensya/database",
+  "name": "@opensya/persistence",
   "version": "0.0.1",
-  "description": "OpenSya Database Orchestration Layer: Metadata Registry, Adapter, Hooks, Relations, and Query Engine.",
+  "description": "The persistence engine behind OpenSya.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,5 +29,17 @@
     "pg": "^8.22.0",
     "typescript": "^5.7.2"
   },
-  "packageManager": "pnpm@11.10.0"
+  "packageManager": "pnpm@11.10.0",
+  "keywords": [
+    "opensya",
+    "persistence",
+    "database",
+    "orm",
+    "drizzle",
+    "typescript",
+    "metadata",
+    "query-engine",
+    "adapter",
+    "postgresql"
+  ]
 }
