@@ -1,105 +1,156 @@
-# Lifecycle hooks
+---
+title: Lifecycle hooks
+description: Transform data and execute behavior around transactional mutations.
+navigation:
+  icon: i-tabler-arrows-split
+---
 
-Lifecycle hooks execute application behavior around mutations.
+Lifecycle hooks execute application behavior before and after create, update, and delete operations.
 
-## Creating a hooks registry
+## Create a hooks registry
 
 ```ts
 import {
   createHooksRegistry,
-  createQueryEngine,
-} from "@opensya/persistence";
+  createQueryEngine
+} from '@opensya/persistence'
 
-const hooks = createHooksRegistry();
-const engine = createQueryEngine(registry, adapter, hooks);
+const hooks = createHooksRegistry()
+const engine = createQueryEngine(registry, adapter, hooks)
 ```
 
 ## Available hooks
 
-| Hook | Input | Purpose |
-| --- | --- | --- |
-| `onBeforeCreate` | data and context | transform data before validation |
-| `onAfterCreate` | created entity and context | run post-create behavior |
-| `onBeforeUpdate` | patch and context | transform the update patch |
-| `onAfterUpdate` | updated entity and context | run post-update behavior |
-| `onBeforeDelete` | filter and context | authorize or prepare deletion |
-| `onAfterDelete` | context | run post-delete behavior |
+::u-page-grid
+  ::u-page-card{title="Before create" description="Transform incoming creation data before validation." icon="i-tabler-file-plus"}
+  ::
+  ::u-page-card{title="After create" description="React to the entity produced by the insert." icon="i-tabler-circle-check"}
+  ::
+  ::u-page-card{title="Before update" description="Normalize, enrich, authorize, or reject a patch." icon="i-tabler-edit"}
+  ::
+  ::u-page-card{title="After update" description="React to each updated entity." icon="i-tabler-file-check"}
+  ::
+  ::u-page-card{title="Before delete" description="Authorize or prepare a deletion." icon="i-tabler-trash-x"}
+  ::
+  ::u-page-card{title="After delete" description="Run behavior after the adapter deletion." icon="i-tabler-trash-check"}
+  ::
+::
 
-## Transforming data
+## Transform data
 
-Before-create and before-update hooks return the data passed to the next hook:
+Before-create and before-update hooks return the value passed to the next hook:
 
 ```ts
-hooks.onBeforeCreate("users", async (data, context) => ({
+hooks.onBeforeCreate('users', async (data, context) => ({
   ...data,
   email: String(data.email).trim().toLowerCase(),
   createdBy: context.user
     ? (context.user as { id: string }).id
-    : null,
-}));
+    : null
+}))
 ```
 
-Hooks run in registration order.
+::u-callout
+---
+icon: i-tabler-sort-ascending
+color: info
+variant: subtle
+---
+Hooks run sequentially in registration order.
+::
 
 ## After hooks
 
 ```ts
-hooks.onAfterCreate("users", async (entity, context) => {
+hooks.onAfterCreate('users', async (entity, context) => {
   await writeAuditEntry({
     operation: context.operation,
     table: context.table,
     entityId: entity.id,
-    requestId: context.requestId,
-  });
-});
+    requestId: context.requestId
+  })
+})
 ```
 
-After hooks execute inside the same adapter transaction as the database mutation. If an after hook throws, the transaction callback rejects and the adapter should roll back the operation.
+After hooks run inside the same transaction as the mutation. Throwing from an after hook rejects the transaction callback.
 
-Avoid slow external calls inside transactional hooks when possible. An outbox pattern is safer for emails, webhooks, and message brokers.
+::u-callout
+---
+icon: i-tabler-clock-exclamation
+color: warning
+variant: subtle
+title: Keep transactions short
+---
+Avoid slow external calls inside hooks. Prefer a transactional outbox for emails, webhooks, and message brokers.
+::
 
 ## Deletion hooks
 
 ```ts
-hooks.onBeforeDelete("users", async (where, context) => {
+hooks.onBeforeDelete('users', async (where, context) => {
   if (!canDeleteUsers(context.user)) {
-    throw new Error("User deletion is not allowed.");
+    throw new Error('User deletion is not allowed.')
   }
 
-  console.debug("Deleting with filter", where);
-});
+  console.debug('Deleting with filter', where)
+})
 ```
 
-For `deleteOne()`, the engine loads the entity first and passes a primary-key filter to the before-delete hook. For `deleteMany()`, it passes the original filter.
+::u-tabs
+  :::u-tab{label="deleteOne" icon="i-tabler-trash"}
+  The engine loads the target first and passes a primary-key filter to the before-delete hook.
+  :::
 
-The deleted entity is not included in the current after-delete context.
+  :::u-tab{label="deleteMany" icon="i-tabler-trash-filled"}
+  The engine passes the original mutation filter to the before-delete hook.
+  :::
+::
 
 ## Hook context
 
 ```ts
 interface HookContext {
-  table: string;
-  operation: "create" | "update" | "delete";
-  metadata: TableMetadata;
-  adapter: DatabaseAdapter;
-  requestId?: string;
-  tenantId?: string;
-  user?: unknown;
-  [key: string]: unknown;
+  table: string
+  operation: 'create' | 'update' | 'delete'
+  metadata: TableMetadata
+  adapter: DatabaseAdapter
+  requestId?: string
+  tenantId?: string
+  user?: unknown
+  [key: string]: unknown
 }
 ```
 
-The adapter in the context is the transaction-scoped adapter. Use it when a hook must perform related database operations atomically.
+The context adapter is transaction-scoped.
 
-## Example: transactional related insert
+## Transactional related operations
 
 ```ts
-hooks.onAfterCreate("users", async (entity, context) => {
-  await context.adapter.insert("profiles", {
+hooks.onAfterCreate('users', async (entity, context) => {
+  await context.adapter.insert('profiles', {
     id: crypto.randomUUID(),
-    userId: entity.id,
-  });
-});
+    userId: entity.id
+  })
+})
 ```
 
-Ensure the related table has been built by the adapter during startup.
+::u-callout
+---
+icon: i-tabler-database-check
+color: success
+variant: subtle
+---
+Related tables must be registered and built by the adapter during startup.
+::
+
+## Execution order
+
+::u-steps{level="3"}
+### Start the adapter transaction
+### Build the hook context
+### Execute before hooks
+### Validate the resolved data
+### Execute the database mutation
+### Execute after hooks
+### Commit or roll back
+::
