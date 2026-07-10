@@ -1,140 +1,134 @@
 ---
 title: Query Engine
-description: Use the application-facing API for reads, relation population, and transactional mutations.
+description: Read and mutate entities through one validated, transactional API.
 navigation:
   icon: i-tabler-engine
 ---
 
-The `QueryEngine` is the main API consumed by application services.
-
-## Creation
+Create an engine from a locked registry, an adapter with built runtime tables, and an optional hooks registry.
 
 ```ts
-import { createQueryEngine } from '@opensya/persistence'
-
 const engine = createQueryEngine(registry, adapter, hooks)
 ```
 
-::u-callout
----
-icon: i-tabler-info-circle
-color: info
-variant: subtle
----
-The hooks registry is optional. When omitted, the engine creates an empty `HooksRegistry`.
-::
-
-## Operations
-
-::u-tabs
-  :::u-tab{label="Read" icon="i-tabler-search"}
-  ```ts
-  engine.findMany<T>(tableName, params)
-  engine.findOne<T>(tableName, params)
-  ```
-
-  Read parameters support `where`, `orderBy`, `limit`, `offset`, and `populate`. Reads do not run lifecycle hooks and are not automatically wrapped in a transaction.
-  :::
-
-  :::u-tab{label="Create" icon="i-tabler-plus"}
-  ```ts
-  engine.create<T>(tableName, data, context)
-  ```
-
-  Creation applies defaults, runs hooks, validates the complete entity, and inserts it transactionally.
-  :::
-
-  :::u-tab{label="Update" icon="i-tabler-edit"}
-  ```ts
-  engine.updateOne<T>(tableName, where, patch, context)
-  engine.updateMany<T>(tableName, where, patch, context)
-  ```
-
-  Updates load existing data, merge the patch for validation, and reject empty filters.
-  :::
-
-  :::u-tab{label="Delete" icon="i-tabler-trash"}
-  ```ts
-  engine.deleteOne(tableName, where, context)
-  engine.deleteMany(tableName, where, context)
-  ```
-
-  Deletes run hooks and reject empty filters before reaching the adapter.
-  :::
-::
-
-## Return values
-
-| Operation | Result |
-| --- | --- |
-| `create` | Created entity |
-| `findOne` | Entity or `null` |
-| `findMany` | Entity array |
-| `updateOne` | Updated entity or `null` |
-| `updateMany` | Updated entity array |
-| `deleteOne` | `true` if a row was deleted |
-| `deleteMany` | Number of deleted rows |
-
-## Query context
-
-Mutation methods accept an optional context forwarded to lifecycle hooks:
+## Reads
 
 ```ts
-await engine.create(
-  'projects',
-  { name: 'OpenSya' },
-  {
-    requestId: request.id,
-    tenantId: tenant.id,
-    user: currentUser,
-    source: 'api'
-  }
+const users = await engine.findMany<User>('users', {
+  where,
+  orderBy: [{ field: 'createdAt', direction: 'desc' }],
+  limit: 20,
+  offset: 0,
+  populate: ['projects']
+})
+
+const user = await engine.findOne<User>('users', {
+  where: byId(userId)
+})
+```
+
+`findOne()` delegates to the adapter with `limit: 1`. Population happens after the base query.
+
+## Create
+
+```ts
+const user = await engine.create<User>(
+  'users',
+  { email: 'john@example.com' },
+  { requestId, tenantId, user: actor }
 )
 ```
 
-::u-page-grid
-  ::u-page-card{title="requestId" description="Correlate mutations with application requests." icon="i-tabler-fingerprint"}
-  ::
-  ::u-page-card{title="tenantId" description="Expose the current tenant to lifecycle hooks." icon="i-tabler-building"}
-  ::
-  ::u-page-card{title="user" description="Expose the current actor to domain rules." icon="i-tabler-user"}
-  ::
-  ::u-page-card{title="Custom fields" description="Carry additional application-specific context." icon="i-tabler-braces"}
-  ::
+::u-steps{level="3"}
+### Apply missing metadata defaults
+### Run before-create hooks in order
+### Reject unknown fields
+### Run structural, field, and table validation
+### Insert with the transaction adapter
+### Run after-create hooks
 ::
+
+## Update one
+
+```ts
+const updated = await engine.updateOne<User>(
+  'users',
+  byId(userId),
+  { email: 'new@example.com' },
+  context
+)
+```
+
+The engine loads one current entity, transforms the patch through hooks, merges it for validation, then targets the write through the entity's complete primary key. It returns `null` when no row matches.
+
+## Update many
+
+```ts
+const updated = await engine.updateMany<User>(
+  'users',
+  {
+    conditions: [
+      { field: 'status', operator: 'eq', value: 'pending' }
+    ]
+  },
+  { status: 'active' }
+)
+```
+
+Every matched entity is validated after merging the resolved patch. After-update hooks run once for every returned updated row.
+
+## Delete
+
+```ts
+const removed = await engine.deleteOne('users', byId(userId))
+const count = await engine.deleteMany('sessions', expiredSessions)
+```
+
+`deleteOne()` first resolves the target, then deletes through its primary key. `deleteMany()` passes the supplied filter directly to the adapter.
+
+## Safe targeting
+
+All update and delete methods reject filters without effective constraints.
+
+```ts
+await engine.deleteMany('users', {})
+// UnsafeMutationError
+```
+
+A nested filter is only considered effective when it eventually contains at least one condition.
+
+## Mutation context
+
+```ts
+interface QueryContextInput {
+  requestId?: string
+  tenantId?: string
+  user?: unknown
+  [key: string]: unknown
+}
+```
+
+Context is forwarded to hooks together with the table metadata and transaction adapter.
 
 ::u-callout
 ---
 icon: i-tabler-shield-exclamation
 color: warning
 variant: subtle
-title: Context is not enforcement
 ---
-Passing `tenantId` or `user` does not automatically enforce tenant isolation or authorization. Implement these rules in services, hooks, policies, or the database.
+Context does not enforce authorization or tenant isolation automatically. It is input for your policies and hooks.
 ::
 
-## Return typing
+## Return values
 
-```ts
-interface User {
-  id: string
-  email: string
-}
+| Method | Return |
+| --- | --- |
+| `findMany<T>` | `T[]` |
+| `findOne<T>` | `T | null` |
+| `create<T>` | `T` |
+| `updateOne<T>` | `T | null` |
+| `updateMany<T>` | `T[]` |
+| `deleteOne` | `boolean` |
+| `deleteMany` | `number` |
 
-const user = await engine.findOne<User>('users', {
-  where: {
-    conditions: [
-      { field: 'id', operator: 'eq', value: userId }
-    ]
-  }
-})
-```
-
-::u-callout
----
-icon: i-tabler-code
-color: neutral
-variant: subtle
----
-The generic controls the returned TypeScript type. It is currently a type assertion rather than metadata-driven inference.
-::
+The generic type is caller-provided. The current API does not infer entity types from metadata.
