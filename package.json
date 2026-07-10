@@ -1,0 +1,33 @@
+{
+  "name": "@opensya/database",
+  "version": "0.0.1",
+  "description": "OpenSya Database Orchestration Layer: Metadata Registry, Adapter, Hooks, Relations, and Query Engine.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "1.0.0-beta.22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.20.0",
+    "pg": "^8.22.0",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@11.10.0"
+}
