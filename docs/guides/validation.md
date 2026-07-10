@@ -1,160 +1,211 @@
-# Validation
+---
+title: Validation
+description: Combine structural checks with synchronous, asynchronous, and cross-field validators.
+navigation:
+  icon: i-tabler-checkup-list
+---
 
-The query engine performs structural validation and custom validation before inserting or updating data.
+The Query Engine validates entities before inserting or updating them.
+
+## Validation layers
+
+::u-page-grid
+  ::u-page-card
+  ---
+  title: Structural validation
+  description: Enforces nullability and JavaScript value types from column metadata.
+  icon: i-tabler-braces
+  spotlight: true
+  ---
+  ::
+
+  ::u-page-card
+  ---
+  title: Field validators
+  description: Run custom synchronous or asynchronous rules against a field and entity.
+  icon: i-tabler-input-check
+  spotlight: true
+  ---
+  ::
+
+  ::u-page-card
+  ---
+  title: Table validators
+  description: Express domain rules involving several fields.
+  icon: i-tabler-table-check
+  spotlight: true
+  ---
+  ::
+::
 
 ## Structural validation
 
-Structural validation is derived from column metadata:
+::u-accordion
+  :::u-accordion-item{label="Required values" icon="i-tabler-asterisk"}
+  A non-nullable field rejects both `null` and `undefined`.
+  :::
 
-- non-nullable fields cannot be `null` or `undefined`;
-- integers must be integer numbers;
-- bigint values must use the JavaScript `bigint` type;
-- booleans must be booleans;
-- timestamps must be `Date` instances;
-- UUID, string, text, and date values must be strings;
-- decimal values may be strings or numbers;
-- JSON accepts any value.
+  :::u-accordion-item{label="Numeric values" icon="i-tabler-number"}
+  `integer` requires an integer number, `bigint` requires a JavaScript `bigint`, and `decimal` accepts a string or number.
+  :::
+
+  :::u-accordion-item{label="Dates and timestamps" icon="i-tabler-calendar"}
+  `timestamp` requires a `Date` instance, while `date` currently expects a string.
+  :::
+
+  :::u-accordion-item{label="Other values" icon="i-tabler-code"}
+  UUID, string, and text values require strings; booleans require booleans; JSON accepts any value.
+  :::
+::
 
 ## Field validators
 
-A field validator receives the value and the full entity:
-
 ```ts
 {
-  name: "email",
-  columnName: "email",
-  type: "string",
+  name: 'email',
+  columnName: 'email',
+  type: 'string',
   nullable: false,
   primaryKey: false,
   unique: true,
 
   validators: [
     {
-      name: "valid-email",
+      name: 'valid-email',
 
-      validate: (value) => {
-        if (typeof value !== "string" || !value.includes("@")) {
+      validate: value => {
+        if (typeof value !== 'string' || !value.includes('@')) {
           return {
             valid: false,
-            message: "A valid email is required.",
-          };
+            message: 'A valid email is required.'
+          }
         }
 
-        return { valid: true };
-      },
-    },
-  ],
+        return { valid: true }
+      }
+    }
+  ]
 }
 ```
 
-Validators may be asynchronous:
+A validator receives the field value and a read-only view of the complete entity.
+
+## Asynchronous validation
 
 ```ts
 {
-  name: "unique-email",
+  name: 'available-email',
 
   async validate(value) {
-    const available = await isEmailAvailable(String(value));
+    const available = await isEmailAvailable(String(value))
 
     return available
       ? { valid: true }
-      : { valid: false, message: "This email is already used." };
-  },
-}
-```
-
-Prefer enforcing uniqueness in the database as well. Application validation alone cannot prevent race conditions.
-
-## Cross-field validation
-
-The second field-validator argument contains the complete entity:
-
-```ts
-{
-  name: "end-after-start",
-
-  validate(value, entity) {
-    const start = entity.startAt;
-    const end = value;
-
-    if (!(start instanceof Date) || !(end instanceof Date)) {
-      return { valid: true };
-    }
-
-    return end > start
-      ? { valid: true }
       : {
           valid: false,
-          message: "The end date must be after the start date.",
-        };
-  },
-}
-```
-
-For domain rules involving several fields, table validators communicate intent more clearly.
-
-## Table validators
-
-```ts
-const tableValidator = {
-  name: "valid-period",
-  fields: ["startAt", "endAt"],
-
-  validate(entity) {
-    const start = entity.startAt;
-    const end = entity.endAt;
-
-    if (start instanceof Date && end instanceof Date && end <= start) {
-      return {
-        valid: false,
-        message: "The period is invalid.",
-      };
-    }
-
-    return { valid: true };
-  },
-};
-```
-
-The `fields` list determines when the validator is rerun during an update. It runs when at least one listed field is present in the patch.
-
-## Validation errors
-
-Failed validations are aggregated:
-
-```ts
-import { ValidationError } from "@opensya/persistence";
-
-try {
-  await engine.create("users", input);
-} catch (error) {
-  if (error instanceof ValidationError) {
-    console.error(error.table);
-    console.error(error.failures);
+          message: 'This email is already used.'
+        }
   }
 }
 ```
 
-Each failure contains:
+::u-callout
+---
+icon: i-tabler-database-shield
+color: warning
+variant: subtle
+title: Keep database constraints
+---
+Application validation cannot prevent every race condition. Preserve database constraints for uniqueness and referential integrity.
+::
+
+## Cross-field rules
+
+::u-tabs
+  :::u-tab{label="Field validator" icon="i-tabler-input-check"}
+  ```ts
+  {
+    name: 'end-after-start',
+
+    validate(value, entity) {
+      const start = entity.startAt
+      const end = value
+
+      if (!(start instanceof Date) || !(end instanceof Date)) {
+        return { valid: true }
+      }
+
+      return end > start
+        ? { valid: true }
+        : {
+            valid: false,
+            message: 'The end date must be after the start date.'
+          }
+    }
+  }
+  ```
+  :::
+
+  :::u-tab{label="Table validator" icon="i-tabler-table-check"}
+  ```ts
+  {
+    name: 'valid-period',
+    fields: ['startAt', 'endAt'],
+
+    validate(entity) {
+      const start = entity.startAt
+      const end = entity.endAt
+
+      if (start instanceof Date && end instanceof Date && end <= start) {
+        return {
+          valid: false,
+          message: 'The period is invalid.'
+        }
+      }
+
+      return { valid: true }
+    }
+  }
+  ```
+
+  The `fields` list determines when the validator is rerun during an update.
+  :::
+::
+
+## Validation errors
 
 ```ts
-interface FieldValidationFailure {
-  field: string;
-  message: string;
+import { ValidationError } from '@opensya/persistence'
+
+try {
+  await engine.create('users', input)
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.error(error.table)
+    console.error(error.failures)
+  }
 }
 ```
 
-Table-validator failures use the comma-separated validator field names as the failure field.
+::u-callout
+---
+icon: i-tabler-list-details
+color: info
+variant: subtle
+---
+Failures are aggregated. Each entry contains a `field` and a human-readable `message`.
+::
 
-## Update behavior
+## Update validation pipeline
 
-For updates, the engine:
+::u-steps{level="3"}
+### Load the current entity
+### Run before-update hooks on the patch
+### Verify every patched field
+### Merge the patch with current data
+### Validate touched fields
+### Run table validators affected by the patch
+### Persist the resolved patch
+::
 
-1. loads the current entity;
-2. applies before-update hooks to the patch;
-3. merges the patch into the current entity;
-4. validates structural and custom rules for touched fields;
-5. runs relevant table validators;
-6. writes the patch.
-
-This allows validators to inspect the complete post-update entity without rewriting untouched fields.
+Untouched invalid data is not rediscovered during every partial update.
