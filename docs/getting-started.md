@@ -1,76 +1,40 @@
 ---
 title: Getting started
-description: Install OpenSya Persistence and execute your first metadata-driven query.
+description: Build a minimal OpenSya Persistence runtime with PostgreSQL and Drizzle.
 navigation:
   icon: i-tabler-rocket
 ---
 
+This guide creates one metadata table, initializes the runtime, performs a mutation, and verifies the live PostgreSQL schema.
+
+## Prerequisites
+
+- a TypeScript application using ES modules;
+- a PostgreSQL database;
+- an initialized Drizzle `PgAsyncDatabase`;
+- physical database tables created through your migration workflow.
+
 ::u-callout
 ---
-icon: i-tabler-info-circle
+icon: i-tabler-package
 color: info
 variant: subtle
-title: Version compatibility
 ---
-OpenSya Persistence is currently at version `0.0.1` and declares `drizzle-orm@1.0.0-beta.22` as a peer dependency.
+Version `0.0.1` declares `drizzle-orm@1.0.0-beta.22` as a peer dependency.
 ::
 
-## Requirements
+## Install
 
-::u-page-grid
-  ::u-page-card
-  ---
-  icon: i-tabler-brand-nodejs
-  title: Node.js
-  description: A modern Node.js runtime with ESM support.
-  spotlight: true
-  ---
-  ::
+```bash [Terminal]
+pnpm add @opensya/persistence drizzle-orm pg
+pnpm add -D @types/pg
+```
 
-  ::u-page-card
-  ---
-  icon: i-tabler-brand-typescript
-  title: TypeScript
-  description: A TypeScript project configured for modern ES modules.
-  spotlight: true
-  ---
-  ::
-
-  ::u-page-card
-  ---
-  icon: i-tabler-brand-postgresql
-  title: PostgreSQL
-  description: A PostgreSQL database connected through Drizzle ORM.
-  spotlight: true
-  ---
-  ::
-::
-
-## Installation
-
-::u-tabs
-  :::u-tab{label="pnpm" icon="i-tabler-package"}
-  ```bash
-  pnpm add @opensya/persistence drizzle-orm pg
-  pnpm add -D @types/pg
-  ```
-  :::
-
-  :::u-tab{label="Yarn" icon="i-tabler-package"}
-  ```bash
-  yarn add @opensya/persistence drizzle-orm pg
-  yarn add -D @types/pg
-  ```
-  :::
-::
-
-## Initialize Persistence
+## Initialize the runtime
 
 ::u-steps{level="3"}
 
-### Declare table metadata
-
-Persistence consumes metadata rather than a Drizzle table definition.
+### Declare metadata
 
 ```ts [users.metadata.ts]
 import type { TableMetadata } from '@opensya/persistence'
@@ -78,7 +42,6 @@ import type { TableMetadata } from '@opensya/persistence'
 export const usersMetadata: TableMetadata = {
   name: 'users',
   collectionName: 'users',
-
   columns: [
     {
       name: 'id',
@@ -99,31 +62,34 @@ export const usersMetadata: TableMetadata = {
       unique: true,
       validators: [
         {
-          name: 'valid-email',
-          validate: value =>
-            typeof value === 'string' && value.includes('@')
+          name: 'email-format',
+          validate(value) {
+            return typeof value === 'string' && value.includes('@')
               ? { valid: true }
-              : { valid: false, message: 'A valid email is required.' }
+              : { valid: false, message: 'Enter a valid email address.' }
+          }
         }
       ]
+    },
+    {
+      name: 'createdAt',
+      columnName: 'created_at',
+      type: 'timestamp',
+      nullable: false,
+      primaryKey: false,
+      unique: false,
+      default: () => new Date(),
+      validators: []
     }
   ],
-
   relations: [],
   tableValidators: []
 }
 ```
 
-::u-callout
----
-icon: i-tabler-key
-color: warning
-variant: subtle
----
-Every registered table must declare at least one primary key.
-::
+Every table needs at least one primary key. Logical names such as `createdAt` are used by the Query Engine; physical names such as `created_at` are used in PostgreSQL.
 
-### Create and lock the registry
+### Register and lock the schema
 
 ```ts [persistence.ts]
 import { createMetadataRegistry } from '@opensya/persistence'
@@ -135,11 +101,9 @@ registry.register(usersMetadata)
 registry.lock()
 ```
 
-Register every table before calling `lock()`. Once locked, the registry rejects new metadata.
+`lock()` validates the complete registry. Register every table before calling it because relations may target metadata declared elsewhere.
 
-### Create the Drizzle adapter
-
-Assuming `db` is an initialized Drizzle PostgreSQL database:
+### Create the adapter
 
 ```ts [persistence.ts]
 import { createDrizzleAdapter } from '@opensya/persistence'
@@ -151,79 +115,63 @@ for (const table of registry.getAll()) {
 }
 ```
 
-::u-callout
----
-icon: i-tabler-database-exclamation
-color: warning
-variant: subtle
-title: Runtime tables only
----
-`buildTable()` creates the Drizzle objects used at runtime. It does not create PostgreSQL tables or run migrations.
-::
+`buildTable()` creates the Drizzle table objects used by runtime queries. It does not create or alter PostgreSQL tables.
 
 ### Create the Query Engine
 
 ```ts [persistence.ts]
-import { createQueryEngine } from '@opensya/persistence'
+import {
+  createHooksRegistry,
+  createQueryEngine
+} from '@opensya/persistence'
 
-const engine = createQueryEngine(registry, adapter)
+const hooks = createHooksRegistry()
+const engine = createQueryEngine(registry, adapter, hooks)
 ```
 
-### Execute your first operations
+### Execute operations
 
-```ts [example.ts]
-const user = await engine.create('users', {
+```ts [users.service.ts]
+interface User {
+  id: string
+  email: string
+  createdAt: Date
+}
+
+const user = await engine.create<User>('users', {
   email: 'john@example.com'
 })
 
-const users = await engine.findMany('users', {
+const saved = await engine.findOne<User>('users', {
   where: {
-    conditions: [
-      {
-        field: 'email',
-        operator: 'eq',
-        value: 'john@example.com'
-      }
-    ]
-  }
-})
-
-await engine.updateOne(
-  'users',
-  {
     conditions: [
       { field: 'id', operator: 'eq', value: user.id }
     ]
-  },
-  {
-    email: 'new-email@example.com'
   }
-)
-
-await engine.deleteOne('users', {
-  conditions: [
-    { field: 'id', operator: 'eq', value: user.id }
-  ]
 })
 ```
+
+### Compare metadata with PostgreSQL
+
+```ts [schema-check.ts]
+import { createConsistencyChecker } from '@opensya/persistence'
+
+const checker = createConsistencyChecker(registry, adapter)
+const drift = await checker.check()
+
+if (drift.length > 0) {
+  console.error(drift)
+}
+```
+
+The Drizzle adapter introspects base tables in PostgreSQL's `public` schema. See [Schema consistency](/guides/schema-consistency) for the exact comparison rules and current introspection limits.
 ::
 
-## Reusable application factory
+## Complete factory
 
-::u-collapsible
-#default
-  ::u-button
-  ---
-  label: Show the complete factory
-  color: neutral
-  variant: subtle
-  trailing-icon: i-tabler-chevron-down
-  ---
-  ::
-
-#content
 ```ts [create-persistence.ts]
 import {
+  createConsistencyChecker,
   createDrizzleAdapter,
   createHooksRegistry,
   createMetadataRegistry,
@@ -233,7 +181,7 @@ import {
 
 export function createPersistence(
   db: Parameters<typeof createDrizzleAdapter>[0],
-  tables: TableMetadata[]
+  tables: readonly TableMetadata[]
 ) {
   const registry = createMetadataRegistry()
 
@@ -251,39 +199,19 @@ export function createPersistence(
 
   const hooks = createHooksRegistry()
   const engine = createQueryEngine(registry, adapter, hooks)
+  const consistency = createConsistencyChecker(registry, adapter)
 
-  return { registry, adapter, hooks, engine }
+  return { registry, adapter, hooks, engine, consistency }
 }
 ```
-::
 
-## Continue learning
+## Next
 
 ::u-page-grid
-  ::u-page-card
-  ---
-  title: Architecture
-  description: Understand the runtime layers and mutation pipeline.
-  icon: i-tabler-sitemap
-  to: /concepts/architecture
-  ---
+  ::u-page-card{title="Metadata and registry" description="Learn every metadata field and registry invariant." icon="i-tabler-schema" to="/concepts/metadata-and-registry"}
   ::
-
-  ::u-page-card
-  ---
-  title: Queries and filters
-  description: Build filters, ordering, pagination, and safe mutations.
-  icon: i-tabler-filter
-  to: /guides/queries-and-filters
-  ---
+  ::u-page-card{title="Query Engine" description="Understand read and mutation semantics." icon="i-tabler-engine" to="/concepts/query-engine"}
   ::
-
-  ::u-page-card
-  ---
-  title: Validation
-  description: Add structural, field, and cross-field rules.
-  icon: i-tabler-checkup-list
-  to: /guides/validation
-  ---
+  ::u-page-card{title="Drizzle adapter" description="Review SQL translation and introspection." icon="i-tabler-database-cog" to="/adapters/drizzle"}
   ::
 ::
