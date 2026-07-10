@@ -1,42 +1,55 @@
-# Metadata and registry
+---
+title: Metadata and registry
+description: Declare tables, columns, defaults, validators, and relations through a shared metadata model.
+navigation:
+  icon: i-tabler-schema
+---
 
-Metadata is the shared schema understood by the query engine and database adapters.
+Metadata is the source of truth shared by the Query Engine, relation resolver, registry, and database adapters.
 
 ## Table metadata
 
-```ts
-import type { TableMetadata } from "@opensya/persistence";
+```ts [projects.metadata.ts]
+import type { TableMetadata } from '@opensya/persistence'
 
-const projectsMetadata: TableMetadata = {
-  name: "projects",
-  collectionName: "projects",
-
+export const projectsMetadata: TableMetadata = {
+  name: 'projects',
+  collectionName: 'projects',
   columns: [],
   relations: [],
-  tableValidators: [],
-};
+  tableValidators: []
+}
 ```
+
+::u-page-grid
+  ::u-page-card{title="name" description="Logical identifier used by the Query Engine." icon="i-tabler-tag"}
+  ::
+  ::u-page-card{title="collectionName" description="Physical table or collection name." icon="i-tabler-database"}
+  ::
+  ::u-page-card{title="columns" description="Fields, types, constraints, defaults, and validators." icon="i-tabler-columns"}
+  ::
+  ::u-page-card{title="relations" description="Links to other registered tables." icon="i-tabler-link"}
+  ::
+::
 
 ## Column metadata
 
-Each column declares both its application field and physical database column.
-
 ```ts
 {
-  name: "createdAt",
-  columnName: "created_at",
-  type: "timestamp",
+  name: 'createdAt',
+  columnName: 'created_at',
+  type: 'timestamp',
   nullable: false,
   primaryKey: false,
   unique: false,
   default: () => new Date(),
-  validators: [],
+  validators: []
 }
 ```
 
-Supported column types are:
+## Supported types
 
-| Metadata type | Runtime value expected by validation | Drizzle PostgreSQL builder |
+| Metadata type | Expected JavaScript value | Drizzle PostgreSQL builder |
 | --- | --- | --- |
 | `uuid` | `string` | `uuid` |
 | `string` | `string` | `text` |
@@ -49,70 +62,100 @@ Supported column types are:
 | `json` | any value | `json` |
 | `decimal` | `string` or `number` | `numeric` |
 
-A non-nullable field is required during creation unless a default supplies its value.
+::u-callout
+---
+icon: i-tabler-alert-triangle
+color: warning
+variant: subtle
+---
+A non-nullable field is required during creation unless a metadata default supplies its value.
+::
 
 ## Defaults
 
-A default can be a value or a function:
+::u-tabs
+  :::u-tab{label="Static value" icon="i-tabler-equal"}
+  ```ts
+  default: 'draft'
+  ```
+  :::
 
-```ts
-default: "draft"
-```
+  :::u-tab{label="Factory function" icon="i-tabler-function"}
+  ```ts
+  default: () => crypto.randomUUID()
+  ```
+  :::
+::
 
-```ts
-default: () => crypto.randomUUID()
-```
-
-Default functions are evaluated by the query engine during creation. The Drizzle adapter also maps defaults to Drizzle when building its runtime table.
+Default functions are evaluated during creation. The Drizzle adapter also maps them when it builds runtime tables.
 
 ## Registry lifecycle
 
-```ts
-import { createMetadataRegistry } from "@opensya/persistence";
-
-const registry = createMetadataRegistry();
-
-registry.register(usersMetadata);
-registry.register(projectsMetadata);
-
-const errors = registry.validate();
-
-if (errors.length > 0) {
-  console.error(errors);
-}
-
-registry.lock();
-```
-
-After `lock()`, further calls to `register()` throw an error.
-
-## Registry validation
-
-The registry checks:
-
-- duplicate logical table names during registration;
-- duplicate physical collection names;
-- duplicate field names;
-- duplicate physical column names;
-- the presence of at least one primary key;
-- duplicate relation names;
-- relation targets;
-- source, target, and junction fields.
-
-Because relations may target tables registered later, register all metadata before calling `validate()` or `lock()`.
-
-## Accessing metadata
+::u-steps{level="3"}
+### Create a registry
 
 ```ts
-registry.has("users");
-registry.get("users");
-registry.getOrThrow("users");
-registry.getAll();
-registry.isLocked();
+const registry = createMetadataRegistry()
 ```
 
-Use `getOrThrow()` when an unknown table should be considered a programming error. The query engine uses this method before executing operations.
+### Register every table
+
+```ts
+registry.register(usersMetadata)
+registry.register(projectsMetadata)
+```
+
+### Inspect validation errors when needed
+
+```ts
+const errors = registry.validate()
+```
+
+### Lock the schema
+
+```ts
+registry.lock()
+```
+::
+
+After `lock()`, any new `register()` call throws an error.
+
+## What the registry validates
+
+::u-accordion
+  :::u-accordion-item{label="Table identity" icon="i-tabler-table"}
+  Duplicate logical table names are rejected during registration, while duplicate physical collection names are reported during validation.
+  :::
+
+  :::u-accordion-item{label="Columns" icon="i-tabler-columns"}
+  The registry checks duplicate logical fields, duplicate physical column names, and the presence of at least one primary key.
+  :::
+
+  :::u-accordion-item{label="Relations" icon="i-tabler-link"}
+  Relation names, target tables, source fields, target fields, junction tables, and junction fields are verified.
+  :::
+::
+
+::u-callout
+---
+icon: i-tabler-list-check
+color: primary
+variant: subtle
+title: Registration order
+---
+Relations may point to tables registered later. Register the complete schema before calling `validate()` or `lock()`.
+::
+
+## Registry API
+
+```ts
+registry.has('users')
+registry.get('users')
+registry.getOrThrow('users')
+registry.getAll()
+registry.isLocked()
+```
 
 ## Composite primary keys
 
-The registry allows more than one column to be marked as a primary key. `updateOne()` and `deleteOne()` build a filter containing all primary-key fields after loading the target entity.
+More than one column may be marked as a primary key. For `updateOne()` and `deleteOne()`, the Query Engine loads the target and builds a filter containing every primary-key field.
