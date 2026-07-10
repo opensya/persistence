@@ -1,7 +1,3 @@
-// ============================================================================
-// COLUMN — la plus petite unité structurelle
-// ============================================================================
-
 export type ColumnType =
   | "uuid"
   | "string"
@@ -37,28 +33,45 @@ export interface ColumnMetadata {
   validators: FieldValidatorMetadata[];
 }
 
-// ============================================================================
-// RELATION
-// ============================================================================
-
-export type RelationKind =
-  | "oneToOne"
-  | "oneToMany"
-  | "manyToOne"
-  | "manyToMany";
-
-export interface RelationMetadata {
+interface BaseRelationMetadata {
   name: string;
-  kind: RelationKind;
   target: string;
-  foreignKey?: string;
-  references?: string;
-  through?: string;
 }
 
-// ============================================================================
-// TABLE VALIDATOR — validation cross-field
-// ============================================================================
+export interface ManyToOneRelationMetadata extends BaseRelationMetadata {
+  kind: "manyToOne";
+  foreignKey: string;
+  references?: string;
+}
+
+export interface OneToOneRelationMetadata extends BaseRelationMetadata {
+  kind: "oneToOne";
+  foreignKey: string;
+  references?: string;
+}
+
+export interface OneToManyRelationMetadata extends BaseRelationMetadata {
+  kind: "oneToMany";
+  foreignKey: string;
+  references?: string;
+}
+
+export interface ManyToManyRelationMetadata extends BaseRelationMetadata {
+  kind: "manyToMany";
+  through: {
+    table: string;
+    sourceForeignKey: string;
+    targetForeignKey: string;
+  };
+  sourceKey?: string;
+  targetKey?: string;
+}
+
+export type RelationMetadata =
+  | ManyToOneRelationMetadata
+  | OneToOneRelationMetadata
+  | OneToManyRelationMetadata
+  | ManyToManyRelationMetadata;
 
 export interface TableValidatorMetadata {
   name: string;
@@ -67,10 +80,6 @@ export interface TableValidatorMetadata {
     entity: Readonly<Record<string, unknown>>,
   ) => ValidationResult | Promise<ValidationResult>;
 }
-
-// ============================================================================
-// TABLE — la racine
-// ============================================================================
 
 export interface TableMetadata {
   name: string;

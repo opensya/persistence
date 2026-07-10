@@ -3,20 +3,28 @@ export interface FieldValidationFailure {
   message: string;
 }
 
-/**
- * Levée quand un create/update échoue la validation. Toutes les erreurs
- * sont agrégées (voir MetadataRegistry.validate() pour le même principe côté
- * schema) plutôt que de s'arrêter au premier champ invalide.
- */
 export class ValidationError extends Error {
-  readonly table: string;
-  readonly failures: FieldValidationFailure[];
-
-  constructor(table: string, failures: FieldValidationFailure[]) {
-    const summary = failures.map((f) => `${f.field}: ${f.message}`).join("; ");
-    super(`Validation échouée pour la table "${table}" : ${summary}`);
+  constructor(
+    public readonly table: string,
+    public readonly failures: FieldValidationFailure[],
+  ) {
+    super(`Validation failed for table "${table}".`);
     this.name = "ValidationError";
-    this.table = table;
-    this.failures = failures;
   }
+}
+
+export class UnsafeMutationError extends Error {
+  constructor(operation: "update" | "delete", table: string) {
+    super(
+      `Unsafe ${operation} rejected for table "${table}": a non-empty filter is required.`,
+    );
+    this.name = "UnsafeMutationError";
+  }
+}
+
+export interface QueryContextInput {
+  requestId?: string;
+  tenantId?: string;
+  user?: unknown;
+  [key: string]: unknown;
 }

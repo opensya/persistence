@@ -1,4 +1,4 @@
-import type { TableMetadata } from "./types.js";
+import type { RelationMetadata, TableMetadata } from "./types.js";
 
 export interface RegistryValidationError {
   table: string;
@@ -11,14 +11,10 @@ export class MetadataRegistry {
 
   register(table: TableMetadata): void {
     if (this.locked) {
-      throw new Error(
-        `Impossible d'enregistrer "${table.name}" : le registry est verrouillé (lock() a déjà été appelé).`,
-      );
+      throw new Error(`Cannot register "${table.name}": registry is locked.`);
     }
     if (this.tables.has(table.name)) {
-      throw new Error(
-        `La table "${table.name}" est déjà enregistrée dans le registry.`,
-      );
+      throw new Error(`Table "${table.name}" is already registered.`);
     }
     this.tables.set(table.name, table);
   }
@@ -30,10 +26,8 @@ export class MetadataRegistry {
   getOrThrow(name: string): TableMetadata {
     const table = this.tables.get(name);
     if (!table) {
-      const known = Array.from(this.tables.keys()).join(", ") || "(aucune)";
-      throw new Error(
-        `Table "${name}" introuvable dans le registry. Tables connues : ${known}.`,
-      );
+      const known = [...this.tables.keys()].join(", ") || "(none)";
+      throw new Error(`Unknown table "${name}". Known tables: ${known}.`);
     }
     return table;
   }
@@ -43,13 +37,21 @@ export class MetadataRegistry {
   }
 
   getAll(): readonly TableMetadata[] {
-    return Array.from(this.tables.values());
+    return [...this.tables.values()];
   }
 
   validate(): RegistryValidationError[] {
     const errors: RegistryValidationError[] = [];
+    const collectionNames = new Set<string>();
 
     for (const table of this.tables.values()) {
+      if (collectionNames.has(table.collectionName)) {
+        errors.push({
+          table: table.name,
+          message: `Collection name "${table.collectionName}" is used more than once.`,
+        });
+      }
+      collectionNames.add(table.collectionName);
       this.validateColumns(table, errors);
       this.validateRelations(table, errors);
     }
@@ -57,28 +59,44 @@ export class MetadataRegistry {
     return errors;
   }
 
+  lock(): void {
+    const errors = this.validate();
+    if (errors.length) {
+      const details = errors
+        .map((error) => `  - [${error.table}] ${error.message}`)
+        .join("\n");
+      throw new Error(`Schema validation failed:\n${details}`);
+    }
+    this.locked = true;
+  }
+
+  isLocked(): boolean {
+    return this.locked;
+  }
+
   private validateColumns(
     table: TableMetadata,
     errors: RegistryValidationError[],
   ): void {
-    const seenColumnNames = new Set<string>();
+    const names = new Set<string>();
+    const columnNames = new Set<string>();
 
     for (const column of table.columns) {
-      if (seenColumnNames.has(column.name)) {
+      if (names.has(column.name)) {
+        errors.push({ table: table.name, message: `Duplicate field "${column.name}".` });
+      }
+      if (columnNames.has(column.columnName)) {
         errors.push({
           table: table.name,
-          message: `Colonne "${column.name}" déclarée plusieurs fois.`,
+          message: `Duplicate database column "${column.columnName}".`,
         });
       }
-      seenColumnNames.add(column.name);
+      names.add(column.name);
+      columnNames.add(column.columnName);
     }
 
-    const hasPrimaryKey = table.columns.some((column) => column.primaryKey);
-    if (!hasPrimaryKey) {
-      errors.push({
-        table: table.name,
-        message: "Aucune colonne primaryKey définie.",
-      });
+    if (!table.columns.some((column) => column.primaryKey)) {
+      errors.push({ table: table.name, message: "At least one primary key is required." });
     }
   }
 
@@ -86,48 +104,90 @@ export class MetadataRegistry {
     table: TableMetadata,
     errors: RegistryValidationError[],
   ): void {
+    const relationNames = new Set<string>();
+
     for (const relation of table.relations) {
-      if (!this.tables.has(relation.target)) {
+      if (relationNames.has(relation.name)) {
+        errors.push({ table: table.name, message: `Duplicate relation "${relation.name}".` });
+      }
+      relationNames.add(relation.name);
+
+      const target = this.tables.get(relation.target);
+      if (!target) {
         errors.push({
           table: table.name,
-          message: `Relation "${relation.name}" cible la table "${relation.target}" qui n'est pas enregistrée.`,
+          message: `Relation "${relation.name}" targets unknown table "${relation.target}".`,
         });
         continue;
       }
 
-      const needsForeignKey =
-        relation.kind === "manyToOne" || relation.kind === "oneToMany";
-      if (needsForeignKey && !relation.foreignKey) {
-        errors.push({
-          table: table.name,
-          message: `Relation "${relation.name}" (${relation.kind}) nécessite un foreignKey.`,
-        });
-      }
-
-      if (relation.kind === "manyToMany" && !relation.through) {
-        errors.push({
-          table: table.name,
-          message: `Relation "${relation.name}" (manyToMany) nécessite une table through.`,
-        });
-      }
+      this.validateRelationFields(table, target, relation, errors);
     }
   }
 
-  lock(): void {
-    const errors = this.validate();
-    if (errors.length > 0) {
-      const formatted = errors
-        .map((e) => `  - [${e.table}] ${e.message}`)
-        .join("\n");
-      throw new Error(
-        `Validation du schema échouée, registry non verrouillé :\n${formatted}`,
-      );
-    }
-    this.locked = true;
-  }
+  private validateRelationFields(
+    source: TableMetadata,
+    target: TableMetadata,
+    relation: RelationMetadata,
+    errors: RegistryValidationError[],
+  ): void {
+    const hasField = (table: TableMetadata, field: string) =>
+      table.columns.some((column) => column.name === field);
 
-  isLocked(): boolean {
-    return this.locked;
+    if (relation.kind === "manyToOne" || relation.kind === "oneToOne") {
+      if (!hasField(source, relation.foreignKey)) {
+        errors.push({
+          table: source.name,
+          message: `Relation "${relation.name}" references missing source field "${relation.foreignKey}".`,
+        });
+      }
+      const targetKey = relation.references ?? "id";
+      if (!hasField(target, targetKey)) {
+        errors.push({
+          table: source.name,
+          message: `Relation "${relation.name}" references missing target field "${targetKey}".`,
+        });
+      }
+      return;
+    }
+
+    if (relation.kind === "oneToMany") {
+      const sourceKey = relation.references ?? "id";
+      if (!hasField(source, sourceKey)) {
+        errors.push({
+          table: source.name,
+          message: `Relation "${relation.name}" references missing source field "${sourceKey}".`,
+        });
+      }
+      if (!hasField(target, relation.foreignKey)) {
+        errors.push({
+          table: source.name,
+          message: `Relation "${relation.name}" references missing target field "${relation.foreignKey}".`,
+        });
+      }
+      return;
+    }
+
+    const through = this.tables.get(relation.through.table);
+    if (!through) {
+      errors.push({
+        table: source.name,
+        message: `Relation "${relation.name}" uses unknown junction table "${relation.through.table}".`,
+      });
+      return;
+    }
+
+    for (const field of [
+      relation.through.sourceForeignKey,
+      relation.through.targetForeignKey,
+    ]) {
+      if (!hasField(through, field)) {
+        errors.push({
+          table: source.name,
+          message: `Relation "${relation.name}" references missing junction field "${field}".`,
+        });
+      }
+    }
   }
 }
 

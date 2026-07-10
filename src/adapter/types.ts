@@ -1,7 +1,27 @@
 import type { TableMetadata } from "../metadata/types.js";
 
+export type FilterOperator =
+  | "eq"
+  | "ne"
+  | "in"
+  | "notIn"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "isNull";
+
+export interface FilterCondition {
+  field: string;
+  operator: FilterOperator;
+  value?: unknown;
+}
+
 export interface QueryFilter {
-  [field: string]: unknown;
+  conditions?: FilterCondition[];
+  and?: QueryFilter[];
+  or?: QueryFilter[];
+  not?: QueryFilter;
 }
 
 export interface QueryParams {
@@ -14,24 +34,40 @@ export interface QueryParams {
 export interface DatabaseAdapter {
   findMany<T = Record<string, unknown>>(
     table: string,
-    params: QueryParams,
+    params?: QueryParams,
   ): Promise<T[]>;
+
   findOne<T = Record<string, unknown>>(
     table: string,
-    params: QueryParams,
+    params?: QueryParams,
   ): Promise<T | null>;
+
   insert<T = Record<string, unknown>>(
     table: string,
     data: Record<string, unknown>,
   ): Promise<T>;
+
   update<T = Record<string, unknown>>(
     table: string,
     where: QueryFilter,
     data: Record<string, unknown>,
   ): Promise<T[]>;
+
   delete(table: string, where: QueryFilter): Promise<number>;
 
-  buildTable(meta: TableMetadata): unknown;
+  transaction<T>(
+    callback: (adapter: DatabaseAdapter) => Promise<T>,
+  ): Promise<T>;
 
+  buildTable(meta: TableMetadata): unknown;
   introspect(): Promise<TableMetadata[]>;
+}
+
+export function hasFilterConstraints(filter: QueryFilter | undefined): boolean {
+  if (!filter) return false;
+  if (filter.conditions?.length) return true;
+  if (filter.and?.some(hasFilterConstraints)) return true;
+  if (filter.or?.some(hasFilterConstraints)) return true;
+  if (filter.not && hasFilterConstraints(filter.not)) return true;
+  return false;
 }
