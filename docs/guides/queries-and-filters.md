@@ -1,219 +1,174 @@
 ---
 title: Queries and filters
-description: Build database-independent filters, ordering, pagination, and safe mutations.
+description: Compose database-independent constraints, sorting, and pagination.
 navigation:
   icon: i-tabler-filter
 ---
 
-Persistence represents query constraints as a database-independent filter tree.
+Queries use logical metadata field names. The adapter validates those fields before translating the query.
 
-## Filter anatomy
+## Query parameters
 
 ```ts
-{
-  field: 'status',
-  operator: 'eq',
-  value: 'active'
+interface QueryParams {
+  where?: QueryFilter
+  limit?: number
+  offset?: number
+  orderBy?: {
+    field: string
+    direction: 'asc' | 'desc'
+  }[]
 }
 ```
 
-A condition contains a logical metadata field, an operator, and an optional value.
+The Query Engine adds `populate?: string[]` for explicit relation loading.
 
-## Operators
-
-| Operator | Meaning | Expected value |
-| --- | --- | --- |
-| `eq` | Equals | Scalar |
-| `ne` | Not equal | Scalar |
-| `in` | Included in a collection | Non-empty array |
-| `notIn` | Excluded from a collection | Non-empty array |
-| `gt` | Greater than | Comparable value |
-| `gte` | Greater than or equal | Comparable value |
-| `lt` | Less than | Comparable value |
-| `lte` | Less than or equal | Comparable value |
-| `isNull` | Null or not-null check | Boolean or omitted |
-
-## Common filters
-
-::u-tabs
-  :::u-tab{label="Equality" icon="i-tabler-equal"}
-  ```ts
-  const users = await engine.findMany('users', {
-    where: {
-      conditions: [
-        { field: 'active', operator: 'eq', value: true },
-        { field: 'role', operator: 'ne', value: 'guest' }
-      ]
-    }
-  })
-  ```
-
-  Conditions in the same filter are combined with `AND`.
-  :::
-
-  :::u-tab{label="Collections" icon="i-tabler-list"}
-  ```ts
-  const users = await engine.findMany('users', {
-    where: {
-      conditions: [
-        {
-          field: 'id',
-          operator: 'in',
-          value: ['id-1', 'id-2']
-        }
-      ]
-    }
-  })
-  ```
-
-  `in` and `notIn` reject empty arrays and non-array values.
-  :::
-
-  :::u-tab{label="Comparison" icon="i-tabler-arrows-sort"}
-  ```ts
-  const recent = await engine.findMany('events', {
-    where: {
-      conditions: [
-        {
-          field: 'createdAt',
-          operator: 'gte',
-          value: startDate
-        }
-      ]
-    }
-  })
-  ```
-  :::
-
-  :::u-tab{label="Null" icon="i-tabler-circle-off"}
-  ```ts
-  // IS NULL
-  { field: 'deletedAt', operator: 'isNull', value: true }
-
-  // IS NOT NULL
-  { field: 'deletedAt', operator: 'isNull', value: false }
-  ```
-  :::
-::
-
-## Nested boolean logic
-
-::u-tabs
-  :::u-tab{label="AND + OR" icon="i-tabler-binary-tree"}
-  ```ts
-  const users = await engine.findMany('users', {
-    where: {
-      and: [
-        {
-          conditions: [
-            { field: 'active', operator: 'eq', value: true }
-          ]
-        },
-        {
-          or: [
-            {
-              conditions: [
-                { field: 'role', operator: 'eq', value: 'admin' }
-              ]
-            },
-            {
-              conditions: [
-                { field: 'role', operator: 'eq', value: 'owner' }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  })
-  ```
-  :::
-
-  :::u-tab{label="NOT" icon="i-tabler-circle-minus"}
-  ```ts
-  const users = await engine.findMany('users', {
-    where: {
-      not: {
-        conditions: [
-          {
-            field: 'status',
-            operator: 'eq',
-            value: 'disabled'
-          }
-        ]
-      }
-    }
-  })
-  ```
-  :::
-::
-
-## Ordering and pagination
+## Conditions
 
 ```ts
-const page = await engine.findMany('users', {
-  orderBy: [
-    { field: 'createdAt', direction: 'desc' },
-    { field: 'email', direction: 'asc' }
-  ],
-  limit: 20,
-  offset: 40
+interface FilterCondition {
+  field: string
+  operator: FilterOperator
+  value?: unknown
+}
+```
+
+| Operator | Translation | Value |
+| --- | --- | --- |
+| `eq` | equals | scalar |
+| `ne` | not equal | scalar |
+| `in` | in array | non-empty array |
+| `notIn` | not in array | non-empty array |
+| `gt`, `gte` | greater comparisons | comparable |
+| `lt`, `lte` | lower comparisons | comparable |
+| `isNull` | null check | `false` means IS NOT NULL; otherwise IS NULL |
+
+Conditions declared together are combined with `AND`.
+
+```ts
+const activeAdmins = await engine.findMany<User>('users', {
+  where: {
+    conditions: [
+      { field: 'active', operator: 'eq', value: true },
+      { field: 'role', operator: 'eq', value: 'admin' }
+    ]
+  }
 })
 ```
 
-::u-page-grid
-  ::u-page-card{title="orderBy" description="Apply one or more ascending or descending field orders." icon="i-tabler-arrows-sort"}
-  ::
-  ::u-page-card{title="limit" description="Restrict the number of returned rows. Zero is valid." icon="i-tabler-list-numbers"}
-  ::
-  ::u-page-card{title="offset" description="Skip rows for offset-based pagination." icon="i-tabler-arrow-bar-to-right"}
-  ::
-::
-
-Negative limits and offsets are rejected.
-
-## Safe mutations
+## Boolean groups
 
 ```ts
-await engine.updateMany(
-  'users',
-  {
-    conditions: [
-      { field: 'status', operator: 'eq', value: 'pending' }
-    ]
-  },
-  {
-    status: 'active'
+const users = await engine.findMany<User>('users', {
+  where: {
+    and: [
+      {
+        conditions: [
+          { field: 'active', operator: 'eq', value: true }
+        ]
+      },
+      {
+        or: [
+          {
+            conditions: [
+              { field: 'role', operator: 'eq', value: 'admin' }
+            ]
+          },
+          {
+            conditions: [
+              { field: 'role', operator: 'eq', value: 'owner' }
+            ]
+          }
+        ]
+      }
+    ],
+    not: {
+      conditions: [
+        { field: 'status', operator: 'eq', value: 'suspended' }
+      ]
+    }
   }
-)
+})
+```
+
+Nested `and`, `or`, and `not` groups compile recursively.
+
+## Collection operators
+
+```ts
+{
+  conditions: [
+    {
+      field: 'id',
+      operator: 'in',
+      value: ['user-1', 'user-2']
+    }
+  ]
+}
 ```
 
 ::u-callout
 ---
-icon: i-tabler-shield-x
-color: error
+icon: i-tabler-alert-triangle
+color: warning
 variant: subtle
-title: Empty filters are rejected
 ---
-Calling `updateOne()`, `updateMany()`, `deleteOne()`, or `deleteMany()` with an empty filter throws `UnsafeMutationError`.
+`in` and `notIn` require arrays containing at least one value. Invalid inputs are rejected before SQL execution.
 ::
 
+## Null checks
+
 ```ts
-// Rejected before reaching the database
-await engine.deleteMany('users', {})
+// IS NULL
+{ field: 'deletedAt', operator: 'isNull' }
+
+// IS NOT NULL
+{ field: 'deletedAt', operator: 'isNull', value: false }
 ```
 
-## Field verification
+## Sorting and pagination
 
-The built-in Drizzle adapter verifies fields used by:
+```ts
+const page = await engine.findMany<User>('users', {
+  orderBy: [
+    { field: 'createdAt', direction: 'desc' },
+    { field: 'email', direction: 'asc' }
+  ],
+  limit: 25,
+  offset: 50
+})
+```
 
-::u-page-grid
-  ::u-page-card{title="Filters" icon="i-tabler-filter" description="Every condition must target a built field."}
-  ::
-  ::u-page-card{title="Ordering" icon="i-tabler-arrows-sort" description="Every orderBy field must exist."}
-  ::
-  ::u-page-card{title="Inserts" icon="i-tabler-database-plus" description="Unknown data fields are rejected."}
-  ::
-  ::u-page-card{title="Updates" icon="i-tabler-database-edit" description="Unknown patch fields are rejected."}
-  ::
+A limit or offset below zero is rejected. `limit: 0` is valid.
+
+## Reusable filters
+
+```ts
+import type { QueryFilter } from '@opensya/persistence'
+
+export function byId(id: string): QueryFilter {
+  return {
+    conditions: [
+      { field: 'id', operator: 'eq', value: id }
+    ]
+  }
+}
+```
+
+## Safe mutations
+
+`hasFilterConstraints()` recursively checks whether a filter contains an actual condition. Update and delete operations reject ineffective filters at both engine and adapter levels.
+
+```ts
+await engine.updateMany('users', {}, { active: false })
+// UnsafeMutationError
+```
+
+::u-callout
+---
+icon: i-tabler-shield-check
+color: success
+variant: subtle
+---
+An empty `conditions` array, empty nested groups, or a `not` containing no condition does not count as a safe filter.
 ::
