@@ -1,114 +1,141 @@
-# Relations
+---
+title: Relations
+description: Declare and explicitly populate direct relations through batched queries.
+navigation:
+  icon: i-tabler-link
+---
 
 Relations are declared in table metadata and loaded explicitly with `populate`.
 
-## Supported relation kinds
+## Supported relations
 
-- `manyToOne`
-- `oneToOne`
-- `oneToMany`
-- `manyToMany`
+::u-tabs
+  :::u-tab{label="Many to one" icon="i-tabler-arrow-narrow-right"}
+  A project belongs to one owner.
 
-## Many-to-one
+  ```ts
+  {
+    name: 'owner',
+    kind: 'manyToOne',
+    target: 'users',
+    foreignKey: 'ownerId',
+    references: 'id'
+  }
+  ```
 
-A project belongs to one owner:
+  `references` defaults to `id`.
+  :::
 
-```ts
-{
-  name: "owner",
-  kind: "manyToOne",
-  target: "users",
-  foreignKey: "ownerId",
-  references: "id",
-}
-```
+  :::u-tab{label="One to one" icon="i-tabler-arrows-right-left"}
+  ```ts
+  {
+    name: 'profile',
+    kind: 'oneToOne',
+    target: 'profiles',
+    foreignKey: 'profileId',
+    references: 'id'
+  }
+  ```
 
-`references` defaults to `id`.
+  The foreign key is stored on the source entity.
+  :::
 
-## One-to-one
+  :::u-tab{label="One to many" icon="i-tabler-git-branch"}
+  A user has many projects.
 
-```ts
-{
-  name: "profile",
-  kind: "oneToOne",
-  target: "profiles",
-  foreignKey: "profileId",
-  references: "id",
-}
-```
+  ```ts
+  {
+    name: 'projects',
+    kind: 'oneToMany',
+    target: 'projects',
+    foreignKey: 'ownerId',
+    references: 'id'
+  }
+  ```
 
-Many-to-one and one-to-one relations are resolved using the foreign key stored on the source entity.
+  `foreignKey` is a field on the target table. `references` identifies the source field.
+  :::
 
-## One-to-many
+  :::u-tab{label="Many to many" icon="i-tabler-topology-star-3"}
+  ```ts
+  {
+    name: 'teams',
+    kind: 'manyToMany',
+    target: 'teams',
 
-A user has many projects:
+    through: {
+      table: 'teamMembers',
+      sourceForeignKey: 'userId',
+      targetForeignKey: 'teamId'
+    },
 
-```ts
-{
-  name: "projects",
-  kind: "oneToMany",
-  target: "projects",
-  foreignKey: "ownerId",
-  references: "id",
-}
-```
+    sourceKey: 'id',
+    targetKey: 'id'
+  }
+  ```
 
-For one-to-many relations, `foreignKey` is a field on the target table. `references` identifies the source field and defaults to `id`.
+  The junction table must be registered and built by the adapter. `sourceKey` and `targetKey` default to `id`.
+  :::
+::
 
-## Many-to-many
+## Populate relations
 
-```ts
-{
-  name: "teams",
-  kind: "manyToMany",
-  target: "teams",
+::u-tabs
+  :::u-tab{label="Many entities" icon="i-tabler-list"}
+  ```ts
+  const users = await engine.findMany('users', {
+    populate: ['projects', 'teams']
+  })
+  ```
+  :::
 
-  through: {
-    table: "teamMembers",
-    sourceForeignKey: "userId",
-    targetForeignKey: "teamId",
-  },
+  :::u-tab{label="One entity" icon="i-tabler-user"}
+  ```ts
+  const user = await engine.findOne('users', {
+    where: {
+      conditions: [
+        { field: 'id', operator: 'eq', value: userId }
+      ]
+    },
+    populate: ['projects']
+  })
+  ```
+  :::
+::
 
-  sourceKey: "id",
-  targetKey: "id",
-}
-```
+Relations are attached using their metadata names.
 
-`sourceKey` and `targetKey` default to `id`. The junction table must also be registered in the metadata registry and built by the adapter.
-
-## Populating relations
-
-```ts
-const users = await engine.findMany("users", {
-  populate: ["projects", "teams"],
-});
-```
-
-For a single entity:
-
-```ts
-const user = await engine.findOne("users", {
-  where: {
-    conditions: [{ field: "id", operator: "eq", value: userId }],
-  },
-  populate: ["projects"],
-});
-```
-
-Relations are attached using their metadata name.
-
-- to-one relations return an entity or `null`;
-- to-many relations return an array.
+::u-page-grid
+  ::u-page-card{title="To-one" description="Returns the related entity or null." icon="i-tabler-user"}
+  ::
+  ::u-page-card{title="To-many" description="Returns an array, including an empty array when no match exists." icon="i-tabler-users"}
+  ::
+::
 
 ## Batch loading
 
-The relation resolver collects foreign-key values and loads related records with `IN` queries. It does not execute one query per source entity.
+::u-steps{level="3"}
+### Collect source keys
+The resolver extracts unique non-null key values from source entities.
 
-For a many-to-many relation, it executes:
+### Load related records
+Related rows are fetched using `IN` filters rather than one query per source entity.
 
-1. one query for matching junction rows;
-2. one query for matching target rows;
-3. in-memory grouping.
+### Group in memory
+Results are indexed and attached to their matching source entities.
+::
+
+For many-to-many relations, the resolver first loads junction rows, then loads target rows, and finally groups them in memory.
+
+::u-callout
+---
+icon: i-tabler-bolt
+color: success
+variant: subtle
+title: No N+1 query per source entity
+---
+The resolver batches keys for each populated direct relation.
+::
 
 ## Explicit loading
 
@@ -116,4 +143,16 @@ Relations are never populated automatically. This keeps query cost visible at th
 
 ## Current boundaries
 
-The current resolver supports direct relation names only. Nested paths such as `projects.owner` are not implemented. Per-relation filtering, sorting, pagination, and field projection are also not currently available.
+::u-accordion
+  :::u-accordion-item{label="No nested paths" icon="i-tabler-sitemap-off"}
+  Paths such as `projects.owner` are not currently supported.
+  :::
+
+  :::u-accordion-item{label="No relation query options" icon="i-tabler-adjustments-off"}
+  Per-relation filters, ordering, pagination, and field projections are not available.
+  :::
+
+  :::u-accordion-item{label="Direct relations only" icon="i-tabler-link"}
+  Each `populate` entry must match a relation declared directly on the source table.
+  :::
+::
