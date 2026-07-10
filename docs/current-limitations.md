@@ -1,99 +1,177 @@
-# Current limitations
+---
+title: Current limitations
+description: Understand the boundaries of OpenSya Persistence version 0.0.1.
+navigation:
+  icon: i-tabler-barrier
+---
 
-OpenSya Persistence is currently published as version `0.0.1`. The core runtime is present, but the following boundaries should be understood before production adoption.
+::u-callout
+---
+icon: i-tabler-flask
+color: warning
+variant: subtle
+title: Early release
+---
+OpenSya Persistence is currently published as version `0.0.1`. The core runtime is available, but several production capabilities remain under development.
+::
 
-## PostgreSQL introspection
+## Capability status
 
-`DrizzleAdapter.introspect()` is not implemented. It currently throws an error.
+::u-page-grid
+  ::u-page-card
+  ---
+  title: Query Engine
+  description: Reads, safe mutations, transactions, defaults, validation, and hooks are implemented.
+  icon: i-tabler-circle-check
+  spotlight: true
+  ---
+  ::
 
-Consequences:
+  ::u-page-card
+  ---
+  title: Drizzle adapter
+  description: PostgreSQL CRUD and filter translation are implemented.
+  icon: i-tabler-circle-check
+  spotlight: true
+  ---
+  ::
 
-- `ConsistencyChecker.check()` cannot run with the built-in adapter;
-- declared metadata cannot yet be compared automatically with a live PostgreSQL schema;
-- migrations remain an external responsibility.
+  ::u-page-card
+  ---
+  title: Relations
+  description: Direct explicit population is implemented; nested loading is not.
+  icon: i-tabler-progress
+  spotlight: true
+  ---
+  ::
 
-## Schema creation and migrations
+  ::u-page-card
+  ---
+  title: Introspection
+  description: PostgreSQL schema introspection is not implemented.
+  icon: i-tabler-circle-x
+  spotlight: true
+  ---
+  ::
+::
 
-`buildTable()` creates Drizzle runtime table objects only. It does not:
+## Schema management
 
-- create PostgreSQL tables;
-- alter existing tables;
-- generate migration files;
-- apply migrations.
+::u-accordion
+  :::u-accordion-item{label="PostgreSQL introspection" icon="i-tabler-database-search"}
+  `DrizzleAdapter.introspect()` currently throws an error. Therefore, `ConsistencyChecker.check()` cannot compare metadata with a live PostgreSQL schema through the built-in adapter.
+  :::
 
-Use an external migration workflow to provision the physical schema.
+  :::u-accordion-item{label="Schema creation" icon="i-tabler-table-plus"}
+  `buildTable()` creates runtime Drizzle objects only. It does not create or alter PostgreSQL tables.
+  :::
 
-## Type inference
+  :::u-accordion-item{label="Migrations" icon="i-tabler-file-database"}
+  Persistence does not generate or apply migration files. Use an external migration workflow.
+  :::
+::
+
+## Type system
 
 Return types are supplied through generics:
 
 ```ts
-const user = await engine.findOne<User>("users", params);
+const user = await engine.findOne<User>('users', params)
 ```
 
-Entity types are not inferred from `TableMetadata`. Metadata field names and filter values are currently string-based rather than statically constrained.
+::u-callout
+---
+icon: i-tabler-code
+color: info
+variant: subtle
+---
+Entity types are not currently inferred from `TableMetadata`. Metadata field names and filter values remain string-based.
+::
 
 ## Relations
 
-The resolver supports direct relation population, but not:
+The resolver currently supports direct population but not:
 
-- nested populate paths;
-- per-relation filters;
-- relation sorting;
-- relation pagination;
-- projections or selected fields;
-- automatic population.
+::u-page-grid
+  ::u-page-card{title="Nested paths" description="Paths such as projects.owner are not supported." icon="i-tabler-sitemap-off"}
+  ::
+  ::u-page-card{title="Relation filters" description="Per-relation filter expressions are unavailable." icon="i-tabler-filter-off"}
+  ::
+  ::u-page-card{title="Pagination" description="Related collections cannot be paginated independently." icon="i-tabler-list-numbers"}
+  ::
+  ::u-page-card{title="Projections" description="Related fields cannot be explicitly selected." icon="i-tabler-columns-off"}
+  ::
+::
 
-## Authorization
+## Authorization and multi-tenancy
 
-Authorization is not built into the query engine. The mutation context can carry a user or tenant, but the engine does not automatically enforce:
+::u-tabs
+  :::u-tab{label="Authorization" icon="i-tabler-lock"}
+  The Query Engine does not automatically enforce roles, row-level permissions, ownership constraints, or authorization policies.
+  :::
 
-- role-based access;
-- row-level permissions;
-- tenant isolation;
-- ownership constraints.
+  :::u-tab{label="Multi-tenancy" icon="i-tabler-building"}
+  Passing `tenantId` in the mutation context exposes it to hooks but does not automatically add tenant fields or query filters.
+  :::
+::
 
-These rules must currently be implemented in application services, lifecycle hooks, or the database.
+Implement these rules in application services, lifecycle hooks, dedicated policies, or the database.
 
-## Multi-tenancy
+## Events and side effects
 
-Passing `tenantId` in the query context only makes it available to hooks. It does not automatically add tenant filters or tenant fields.
+There is no built-in domain-event dispatcher or transactional outbox.
 
-## Domain events
+::u-callout
+---
+icon: i-tabler-mail-exclamation
+color: warning
+variant: subtle
+---
+After hooks run inside the transaction. Delegate slow or unreliable effects such as emails, webhooks, and broker publishing to an application-managed outbox.
+::
 
-There is no built-in domain-event dispatcher or transactional outbox. After hooks run inside the transaction, so slow or unreliable external side effects should be delegated to an application-managed outbox.
+## Hooks
 
-## Read hooks
+::u-accordion
+  :::u-accordion-item{label="No read hooks" icon="i-tabler-eye-off"}
+  The registry covers create, update, and delete operations only.
+  :::
 
-The hooks registry currently covers create, update, and delete operations. There are no before-read or after-read hooks.
+  :::u-accordion-item{label="Limited after-delete payload" icon="i-tabler-trash"}
+  After-delete hooks receive context but not the deleted entity or affected row count.
+  :::
 
-## Delete hook payload
-
-After-delete hooks receive context but not the deleted entity or affected row count.
-
-## Partial update validation
-
-During updates, structural and field validation is limited to fields touched by the resolved patch. Table validators run when one of their declared fields is touched.
-
-This is efficient, but existing invalid data in untouched fields is not rediscovered by every update.
+  :::u-accordion-item{label="Partial update validation" icon="i-tabler-edit"}
+  Updates validate touched fields and relevant table validators. Invalid data in untouched fields is not rediscovered on every patch.
+  :::
+::
 
 ## Adapter scope
 
-Only the PostgreSQL Drizzle adapter is included today. The architecture supports custom adapters, but compatibility depends on each implementation preserving the query and transaction contract.
+Only the PostgreSQL Drizzle adapter is included. The architecture supports custom adapters, but each implementation must preserve the query, safety, and transaction contracts.
 
 ## Roadmap candidates
 
-The current design naturally leaves room for:
+::u-page-grid
+  ::u-page-card{title="PostgreSQL introspection" icon="i-tabler-database-search" description="Read and compare live schemas."}
+  ::
+  ::u-page-card{title="Type inference" icon="i-tabler-brand-typescript" description="Derive entity and query types from metadata."}
+  ::
+  ::u-page-card{title="Authorization" icon="i-tabler-shield-lock" description="Introduce explicit data access policies."}
+  ::
+  ::u-page-card{title="Tenant enforcement" icon="i-tabler-building-community" description="Apply tenant constraints consistently."}
+  ::
+  ::u-page-card{title="Domain events" icon="i-tabler-broadcast" description="Publish transactional domain changes."}
+  ::
+  ::u-page-card{title="Nested relations" icon="i-tabler-sitemap" description="Populate deeper relation graphs."}
+  ::
+::
 
-- PostgreSQL introspection;
-- schema-drift reporting;
-- stronger metadata-driven type inference;
-- authorization policies;
-- tenant-aware query enforcement;
-- audit logs;
-- domain events and an outbox;
-- nested relation loading;
-- additional database adapters;
-- generated APIs.
-
-These items describe possible evolution and are not commitments for a specific release.
+::u-callout
+---
+icon: i-tabler-calendar-question
+color: neutral
+variant: subtle
+---
+These are possible directions, not commitments for a specific release.
+::
