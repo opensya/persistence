@@ -1,134 +1,173 @@
-# Architecture
+---
+title: Architecture
+description: Understand how OpenSya Persistence separates domain execution from database access.
+navigation:
+  icon: i-tabler-sitemap
+---
 
-OpenSya Persistence separates domain execution from database access.
+OpenSya Persistence is organized around a small set of components with explicit responsibilities.
+
+::u-callout
+---
+icon: i-tabler-bulb
+color: primary
+variant: subtle
+title: Core idea
+---
+Application services talk to the Query Engine. The Query Engine coordinates domain rules and delegates database operations to an adapter.
+::
 
 ## Runtime layers
 
+::u-page-grid
+  ::u-page-card
+  ---
+  icon: i-tabler-apps
+  title: Application services
+  description: Express use cases and invoke persistence operations.
+  spotlight: true
+  ---
+  ::
+
+  ::u-page-card
+  ---
+  icon: i-tabler-engine
+  title: Query Engine
+  description: Coordinates reads, validation, hooks, relations, and mutations.
+  spotlight: true
+  ---
+  ::
+
+  ::u-page-card
+  ---
+  icon: i-tabler-schema
+  title: Metadata Registry
+  description: Stores and validates the declared persistence model.
+  spotlight: true
+  ---
+  ::
+
+  ::u-page-card
+  ---
+  icon: i-tabler-plug-connected
+  title: Database Adapter
+  description: Translates generic operations into database-specific queries.
+  spotlight: true
+  ---
+  ::
+::
+
 ```text
 Application services
-        |
-        v
+        │
+        ▼
     QueryEngine
-        |
-        +-------------------+
-        |                   |
-        v                   v
- MetadataRegistry      HooksRegistry
-        |
-        v
+        │
+        ├───────────────┐
+        ▼               ▼
+MetadataRegistry   HooksRegistry
+        │
+        ▼
  RelationResolver
-        |
-        v
+        │
+        ▼
  DatabaseAdapter
-        |
-        v
- Database implementation
+        │
+        ▼
+     Database
 ```
 
-## Metadata layer
+## Component responsibilities
 
-The metadata layer describes the persistence model independently from the database adapter.
+::u-accordion
+  :::u-accordion-item{label="Metadata layer" icon="i-tabler-schema"}
+  A `TableMetadata` describes the logical name, physical collection, columns, relations, field validators, and table validators. The `MetadataRegistry` checks the schema before the application begins serving requests.
+  :::
 
-A `TableMetadata` contains:
+  :::u-accordion-item{label="Query layer" icon="i-tabler-engine"}
+  The `QueryEngine` is the application-facing API. It coordinates table lookup, defaults, lifecycle hooks, validation, transactions, safe mutations, and explicit relation population.
+  :::
 
-- a logical name used by the engine;
-- the physical collection or table name;
-- column definitions;
-- relation definitions;
-- field validators;
-- table validators.
+  :::u-accordion-item{label="Relation layer" icon="i-tabler-link"}
+  The `RelationResolver` uses declared metadata to load direct relations in batches and attach them to returned entities.
+  :::
 
-The `MetadataRegistry` stores these definitions and validates their internal consistency before the application starts accepting requests.
+  :::u-accordion-item{label="Adapter layer" icon="i-tabler-database-cog"}
+  The `DatabaseAdapter` contract isolates the engine from a specific ORM. The built-in implementation uses Drizzle and PostgreSQL.
+  :::
+::
 
-## Query layer
+## Mutation pipelines
 
-The `QueryEngine` is the application-facing API. It coordinates:
+::u-tabs
+  :::u-tab{label="Create" icon="i-tabler-plus"}
+  ::u-steps{level="4"}
+  #### Start a transaction
+  #### Apply metadata defaults
+  #### Run before-create hooks
+  #### Verify fields and validate the entity
+  #### Insert through the transaction adapter
+  #### Run after-create hooks
+  #### Commit or roll back
+  ::
+  :::
 
-- table lookup;
-- reads and relation population;
-- defaults;
-- lifecycle hooks;
-- structural and custom validation;
-- transactions;
-- safe mutations.
+  :::u-tab{label="Update" icon="i-tabler-edit"}
+  ::u-steps{level="4"}
+  #### Reject an empty filter
+  #### Start a transaction and load current rows
+  #### Run before-update hooks
+  #### Merge the patch and validate affected fields
+  #### Update through the transaction adapter
+  #### Run after-update hooks
+  #### Commit or roll back
+  ::
+  :::
 
-Application services should normally depend on the query engine instead of invoking the adapter directly.
-
-## Adapter layer
-
-The `DatabaseAdapter` interface is deliberately small:
-
-- `findMany`
-- `findOne`
-- `insert`
-- `update`
-- `delete`
-- `transaction`
-- `buildTable`
-- `introspect`
-
-The built-in `DrizzleAdapter` translates generic filters and metadata into Drizzle PostgreSQL operations.
-
-## Mutation pipeline
-
-### Create
-
-```text
-transaction
-  -> defaults
-  -> beforeCreate
-  -> field verification
-  -> validation
-  -> insert
-  -> afterCreate
-  -> commit
-```
-
-### Update
-
-```text
-safe-filter check
-  -> transaction
-  -> load current rows
-  -> beforeUpdate
-  -> merge current data and patch
-  -> validate affected fields
-  -> update
-  -> afterUpdate
-  -> commit
-```
-
-### Delete
-
-```text
-safe-filter check
-  -> transaction
-  -> beforeDelete
-  -> delete
-  -> afterDelete
-  -> commit
-```
-
-An error thrown anywhere inside the callback is delegated to the adapter transaction implementation and should roll back the mutation.
+  :::u-tab{label="Delete" icon="i-tabler-trash"}
+  ::u-steps{level="4"}
+  #### Reject an empty filter
+  #### Start a transaction
+  #### Resolve the target for `deleteOne()`
+  #### Run before-delete hooks
+  #### Delete through the transaction adapter
+  #### Run after-delete hooks
+  #### Commit or roll back
+  ::
+  :::
+::
 
 ## Logical and physical names
 
-Persistence distinguishes between:
+| Metadata property | Purpose | Example |
+| --- | --- | --- |
+| `TableMetadata.name` | Logical identifier used by the engine | `users` |
+| `TableMetadata.collectionName` | Physical PostgreSQL table | `app_users` |
+| `ColumnMetadata.name` | Entity and filter field | `createdAt` |
+| `ColumnMetadata.columnName` | Physical database column | `created_at` |
 
-- `TableMetadata.name`: the logical identifier passed to `QueryEngine`;
-- `TableMetadata.collectionName`: the physical PostgreSQL table name;
-- `ColumnMetadata.name`: the logical field name used in entities and filters;
-- `ColumnMetadata.columnName`: the physical database column name.
+::u-callout
+---
+icon: i-tabler-arrows-exchange
+color: info
+variant: subtle
+---
+The separation keeps application naming stable while allowing the physical database to follow another naming convention.
+::
 
-This separation allows application naming to remain stable even when database naming conventions differ.
+## Adapter contract
 
-## Dependency direction
+A database adapter implements:
 
-The engine depends on interfaces and metadata, not on Drizzle-specific types. Database-specific behavior belongs inside an adapter.
+::u-page-grid
+  ::u-page-card{title="Reads" description="findMany and findOne" icon="i-tabler-search"}
+  ::
+  ::u-page-card{title="Mutations" description="insert, update, and delete" icon="i-tabler-pencil"}
+  ::
+  ::u-page-card{title="Transactions" description="transaction-scoped operations" icon="i-tabler-arrows-transfer-up"}
+  ::
+  ::u-page-card{title="Schema" description="buildTable and introspect" icon="i-tabler-database"}
+  ::
+::
 
-A custom adapter should preserve the safety guarantees of the built-in adapter, especially:
-
-- rejecting empty update and delete filters;
-- validating referenced fields;
-- executing mutation callbacks transactionally;
-- returning inserted and updated rows consistently.
+Custom adapters should preserve the built-in safety guarantees: field verification, non-empty mutation filters, transactional callbacks, and consistent return values.
