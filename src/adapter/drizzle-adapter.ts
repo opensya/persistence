@@ -14,6 +14,7 @@ import {
   not,
   notInArray,
   or,
+  sql,
   type SQL,
 } from "drizzle-orm";
 import {
@@ -154,8 +155,98 @@ export class DrizzleAdapter implements DatabaseAdapter {
     );
   }
 
+  /**
+   * Real introspection via information_schema — independent from any
+   * Drizzle schema already built (works even for tables never passed to
+   * buildTable()).
+   *
+   * Known limitations for this first pass:
+   * - `unique` is not introspected (always false)
+   * - relations (foreign keys) are not introspected (always [])
+   * - unrecognized SQL types fall back to 'text'
+   */
   async introspect(): Promise<TableMetadata[]> {
-    throw new Error("PostgreSQL introspection is not implemented yet.");
+    const tablesResult = (await this.db.execute(sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    `)) as { rows: { table_name: string }[] };
+
+    const tables: TableMetadata[] = [];
+
+    for (const { table_name: tableName } of tablesResult.rows) {
+      const columnsResult = (await this.db.execute(sql`
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = ${tableName}
+        ORDER BY ordinal_position
+      `)) as {
+        rows: { column_name: string; data_type: string; is_nullable: string }[];
+      };
+
+      const pkResult = (await this.db.execute(sql`
+        SELECT kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        WHERE tc.constraint_type = 'PRIMARY KEY'
+          AND tc.table_schema = 'public' AND tc.table_name = ${tableName}
+      `)) as { rows: { column_name: string }[] };
+
+      const primaryKeyColumns = new Set(
+        pkResult.rows.map((r) => r.column_name),
+      );
+
+      const columns: ColumnMetadata[] = columnsResult.rows.map((row) => ({
+        name: row.column_name,
+        columnName: row.column_name,
+        type: this.mapSqlTypeToColumnType(row.data_type),
+        nullable: row.is_nullable === "YES",
+        primaryKey: primaryKeyColumns.has(row.column_name),
+        unique: false,
+        validators: [],
+      }));
+
+      tables.push({
+        name: tableName,
+        collectionName: tableName,
+        columns,
+        relations: [],
+        tableValidators: [],
+      });
+    }
+
+    return tables;
+  }
+
+  private mapSqlTypeToColumnType(sqlType: string): ColumnMetadata["type"] {
+    switch (sqlType) {
+      case "uuid":
+        return "uuid";
+      case "character varying":
+        return "string";
+      case "text":
+        return "text";
+      case "integer":
+        return "integer";
+      case "bigint":
+        return "bigint";
+      case "boolean":
+        return "boolean";
+      case "timestamp without time zone":
+      case "timestamp with time zone":
+        return "timestamp";
+      case "date":
+        return "date";
+      case "json":
+      case "jsonb":
+        return "json";
+      case "numeric":
+        return "decimal";
+      default:
+        // Unrecognized SQL type: documented fallback rather than a throw —
+        // a reported drift is preferable to a crash.
+        return "text";
+    }
   }
 
   private buildWhere(table: BuiltTable, filter?: QueryFilter): SQL | undefined {

@@ -64,8 +64,8 @@ async function main() {
         name: "end-after-start",
         fields: ["startDate", "endDate"],
         validate: (entity) => {
-          const start = new Date(entity.startDate as string);
-          const end = new Date(entity.endDate as string);
+          const start = entity.startDate as Date;
+          const end = entity.endDate as Date;
           return end > start
             ? { valid: true }
             : { valid: false, message: "endDate doit être après startDate" };
@@ -91,8 +91,8 @@ async function main() {
   await pool.query("DROP TABLE IF EXISTS events");
   await pool.query(`
     CREATE TABLE events (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
+      id VARCHAR(255) PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
       start_date TIMESTAMP NOT NULL,
       end_date TIMESTAMP NOT NULL
     )
@@ -103,8 +103,8 @@ async function main() {
   const valid = await engine.create("events", {
     id: "e1",
     title: "Conf OpenSya",
-    startDate: "2026-09-01T09:00:00Z",
-    endDate: "2026-09-01T17:00:00Z",
+    startDate: new Date("2026-09-01T09:00:00Z"),
+    endDate: new Date("2026-09-01T17:00:00Z"),
   });
   console.log("✓ Test 1 (create valide) ->", valid);
 
@@ -113,8 +113,8 @@ async function main() {
     await engine.create("events", {
       id: "e2",
       title: "   ",
-      startDate: "2026-09-01T09:00:00Z",
-      endDate: "2026-09-01T17:00:00Z",
+      startDate: new Date("2026-09-01T09:00:00Z"),
+      endDate: new Date("2026-09-01T17:00:00Z"),
     });
     throw new Error("FAIL: aurait dû lever ValidationError (titre vide)");
   } catch (e) {
@@ -130,8 +130,8 @@ async function main() {
     await engine.create("events", {
       id: "e3",
       title: "Event invalide",
-      startDate: "2026-09-01T17:00:00Z",
-      endDate: "2026-09-01T09:00:00Z",
+      startDate: new Date("2026-09-01T17:00:00Z"),
+      endDate: new Date("2026-09-01T09:00:00Z"),
     });
     throw new Error("FAIL: aurait dû lever ValidationError (dates inversées)");
   } catch (e) {
@@ -153,19 +153,19 @@ async function main() {
     throw new Error("FAIL: seule e1 aurait dû être insérée");
 
   // Test 5 : update partiel valide (ne touche que le titre, ne revalide pas les dates)
-  const updated = await engine.update(
+  const updated = await engine.updateOne(
     "events",
-    { id: "e1" },
+    { conditions: [{ field: "id", operator: "eq", value: "e1" }] },
     { title: "Conf OpenSya 2026" },
   );
   console.log("✓ Test 5 (update partiel valide) ->", updated);
 
   // Test 6 : update partiel qui casse le cross-field validator
   try {
-    await engine.update(
+    await engine.updateOne(
       "events",
-      { id: "e1" },
-      { endDate: "2026-08-31T00:00:00Z" },
+      { conditions: [{ field: "id", operator: "eq", value: "e1" }] },
+      { endDate: new Date("2026-08-31T00:00:00Z") },
     );
     throw new Error(
       "FAIL: aurait dû lever ValidationError (update casse end > start)",

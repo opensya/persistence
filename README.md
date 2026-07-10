@@ -98,7 +98,6 @@ await engine.create("users", {
 
 ## Roadmap
 
-* PostgreSQL Introspection
 * Authorization
 * Audit Log
 * Multi-tenancy
