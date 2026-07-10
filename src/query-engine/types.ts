@@ -8,7 +8,8 @@ export class ValidationError extends Error {
     public readonly table: string,
     public readonly failures: FieldValidationFailure[],
   ) {
-    super(`Validation failed for table "${table}".`);
+    const summary = failures.map((f) => `${f.field}: ${f.message}`).join("; ");
+    super(`Validation failed for table "${table}": ${summary}`);
     this.name = "ValidationError";
   }
 }
