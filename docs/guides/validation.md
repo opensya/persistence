@@ -1,62 +1,26 @@
 ---
 title: Validation
-description: Combine structural checks with synchronous, asynchronous, and cross-field validators.
+description: Validate structure and domain rules before data reaches the adapter.
 navigation:
   icon: i-tabler-checkup-list
 ---
 
-The Query Engine validates entities before inserting or updating them.
-
-## Validation layers
-
-::u-page-grid
-  ::u-page-card
-  ---
-  title: Structural validation
-  description: Enforces nullability and JavaScript value types from column metadata.
-  icon: i-tabler-braces
-  spotlight: true
-  ---
-  ::
-
-  ::u-page-card
-  ---
-  title: Field validators
-  description: Run custom synchronous or asynchronous rules against a field and entity.
-  icon: i-tabler-input-check
-  spotlight: true
-  ---
-  ::
-
-  ::u-page-card
-  ---
-  title: Table validators
-  description: Express domain rules involving several fields.
-  icon: i-tabler-table-check
-  spotlight: true
-  ---
-  ::
-::
+Create and update operations run structural, field, and table validation inside the mutation transaction.
 
 ## Structural validation
 
-::u-accordion
-  :::u-accordion-item{label="Required values" icon="i-tabler-asterisk"}
-  A non-nullable field rejects both `null` and `undefined`.
-  :::
+Structural rules come from `ColumnMetadata`.
 
-  :::u-accordion-item{label="Numeric values" icon="i-tabler-number"}
-  `integer` requires an integer number, `bigint` requires a JavaScript `bigint`, and `decimal` accepts a string or number.
-  :::
-
-  :::u-accordion-item{label="Dates and timestamps" icon="i-tabler-calendar"}
-  `timestamp` requires a `Date` instance, while `date` currently expects a string.
-  :::
-
-  :::u-accordion-item{label="Other values" icon="i-tabler-code"}
-  UUID, string, and text values require strings; booleans require booleans; JSON accepts any value.
-  :::
-::
+| Metadata type | Valid value |
+| --- | --- |
+| non-nullable column | neither `null` nor `undefined` |
+| `integer` | integer number |
+| `bigint` | bigint |
+| `decimal` | string or number |
+| `boolean` | boolean |
+| `timestamp` | Date |
+| `uuid`, `string`, `text`, `date` | string |
+| `json` | any value |
 
 ## Field validators
 
@@ -68,144 +32,110 @@ The Query Engine validates entities before inserting or updating them.
   nullable: false,
   primaryKey: false,
   unique: true,
-
   validators: [
     {
-      name: 'valid-email',
-
-      validate: value => {
-        if (typeof value !== 'string' || !value.includes('@')) {
-          return {
-            valid: false,
-            message: 'A valid email is required.'
-          }
-        }
-
-        return { valid: true }
+      name: 'email-format',
+      validate(value, entity) {
+        return typeof value === 'string' && value.includes('@')
+          ? { valid: true }
+          : { valid: false, message: 'Enter a valid email.' }
       }
     }
   ]
 }
 ```
 
-A validator receives the field value and a read-only view of the complete entity.
-
-## Asynchronous validation
+The validator receives the field value and the complete read-only entity. It may return immediately or return a promise.
 
 ```ts
 {
-  name: 'available-email',
-
+  name: 'email-availability',
   async validate(value) {
     const available = await isEmailAvailable(String(value))
 
     return available
       ? { valid: true }
-      : {
-          valid: false,
-          message: 'This email is already used.'
-        }
+      : { valid: false, message: 'Email already exists.' }
   }
 }
 ```
 
-::u-callout
----
-icon: i-tabler-database-shield
-color: warning
-variant: subtle
-title: Keep database constraints
----
-Application validation cannot prevent every race condition. Preserve database constraints for uniqueness and referential integrity.
-::
+Database constraints should still enforce race-sensitive rules such as uniqueness.
 
-## Cross-field rules
+## Table validators
 
-::u-tabs
-  :::u-tab{label="Field validator" icon="i-tabler-input-check"}
-  ```ts
-  {
-    name: 'end-after-start',
-
-    validate(value, entity) {
-      const start = entity.startAt
-      const end = value
-
-      if (!(start instanceof Date) || !(end instanceof Date)) {
-        return { valid: true }
-      }
-
-      return end > start
-        ? { valid: true }
-        : {
-            valid: false,
-            message: 'The end date must be after the start date.'
-          }
-    }
-  }
-  ```
-  :::
-
-  :::u-tab{label="Table validator" icon="i-tabler-table-check"}
-  ```ts
-  {
-    name: 'valid-period',
-    fields: ['startAt', 'endAt'],
-
-    validate(entity) {
-      const start = entity.startAt
-      const end = entity.endAt
-
-      if (start instanceof Date && end instanceof Date && end <= start) {
-        return {
-          valid: false,
-          message: 'The period is invalid.'
-        }
-      }
-
-      return { valid: true }
-    }
-  }
-  ```
-
-  The `fields` list determines when the validator is rerun during an update.
-  :::
-::
-
-## Validation errors
+Use table validators when the rule depends on multiple fields.
 
 ```ts
-import { ValidationError } from '@opensya/persistence'
+{
+  name: 'valid-period',
+  fields: ['startsAt', 'endsAt'],
+  validate(entity) {
+    const startsAt = entity.startsAt
+    const endsAt = entity.endsAt
 
+    if (
+      startsAt instanceof Date &&
+      endsAt instanceof Date &&
+      endsAt <= startsAt
+    ) {
+      return {
+        valid: false,
+        message: 'End must be after start.'
+      }
+    }
+
+    return { valid: true }
+  }
+}
+```
+
+During partial updates, the validator runs when at least one field listed in `fields` is touched.
+
+## Create validation
+
+::u-steps{level="3"}
+### Apply defaults
+### Transform data through before-create hooks
+### Reject fields absent from metadata
+### Validate every column
+### Run every table validator
+### Insert only when there are no failures
+::
+
+## Update validation
+
+The engine loads current rows, applies before-update hooks, merges the resolved patch with each current entity, then validates only touched columns and relevant table validators.
+
+This ensures cross-field validators see the post-update entity without rewriting untouched data.
+
+## ValidationError
+
+```ts
 try {
   await engine.create('users', input)
 } catch (error) {
   if (error instanceof ValidationError) {
+    console.error(error.message)
     console.error(error.table)
     console.error(error.failures)
   }
 }
 ```
 
-::u-callout
----
-icon: i-tabler-list-details
-color: info
-variant: subtle
----
-Failures are aggregated. Each entry contains a `field` and a human-readable `message`.
-::
+A failure contains a field and message:
 
-## Update validation pipeline
+```ts
+interface FieldValidationFailure {
+  field: string
+  message: string
+}
+```
 
-::u-steps{level="3"}
-### Load the current entity
-### Run before-update hooks on the patch
-### Verify every patched field
-### Merge the patch with current data
-### Validate touched fields
-### Run table validators affected by the patch
-### Persist the resolved patch
-::
+The error message now includes the aggregated failure summary:
 
-Untouched invalid data is not rediscovered during every partial update.
+```text
+Validation failed for table "users": email: Enter a valid email.; name: This field is required.
+```
+
+The structured `failures` array remains available for API error responses and form mapping.
