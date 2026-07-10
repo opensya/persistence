@@ -1,161 +1,145 @@
 ---
 title: Metadata and registry
-description: Declare tables, columns, defaults, validators, and relations through a shared metadata model.
+description: Declare the persistence model and validate its internal consistency.
 navigation:
   icon: i-tabler-schema
 ---
 
-Metadata is the source of truth shared by the Query Engine, relation resolver, registry, and database adapters.
+Metadata describes the model consumed by every Persistence service.
 
 ## Table metadata
 
-```ts [projects.metadata.ts]
-import type { TableMetadata } from '@opensya/persistence'
-
-export const projectsMetadata: TableMetadata = {
-  name: 'projects',
-  collectionName: 'projects',
-  columns: [],
-  relations: [],
-  tableValidators: []
+```ts
+interface TableMetadata {
+  name: string
+  collectionName: string
+  columns: ColumnMetadata[]
+  relations: RelationMetadata[]
+  tableValidators: TableValidatorMetadata[]
 }
 ```
 
-::u-page-grid
-  ::u-page-card{title="name" description="Logical identifier used by the Query Engine." icon="i-tabler-tag"}
-  ::
-  ::u-page-card{title="collectionName" description="Physical table or collection name." icon="i-tabler-database"}
-  ::
-  ::u-page-card{title="columns" description="Fields, types, constraints, defaults, and validators." icon="i-tabler-columns"}
-  ::
-  ::u-page-card{title="relations" description="Links to other registered tables." icon="i-tabler-link"}
-  ::
-::
+- `name` is the logical identifier used by the engine.
+- `collectionName` is the physical database table name.
+- `columns` describe fields and their constraints.
+- `relations` describe direct links between registered tables.
+- `tableValidators` express rules spanning several fields.
 
 ## Column metadata
 
 ```ts
-{
-  name: 'createdAt',
-  columnName: 'created_at',
-  type: 'timestamp',
-  nullable: false,
-  primaryKey: false,
-  unique: false,
-  default: () => new Date(),
-  validators: []
+interface ColumnMetadata {
+  name: string
+  columnName: string
+  type: ColumnType
+  nullable: boolean
+  primaryKey: boolean
+  unique: boolean
+  default?: unknown | (() => unknown)
+  validators: FieldValidatorMetadata[]
 }
 ```
 
-## Supported types
+## Column types
 
-| Metadata type | Expected JavaScript value | Drizzle PostgreSQL builder |
-| --- | --- | --- |
-| `uuid` | `string` | `uuid` |
-| `string` | `string` | `text` |
-| `text` | `string` | `text` |
-| `integer` | integer `number` | `integer` |
-| `bigint` | `bigint` | `bigint` |
-| `boolean` | `boolean` | `boolean` |
-| `timestamp` | `Date` | `timestamp` |
-| `date` | `string` | `date` |
-| `json` | any value | `json` |
-| `decimal` | `string` or `number` | `numeric` |
-
-::u-callout
----
-icon: i-tabler-alert-triangle
-color: warning
-variant: subtle
----
-A non-nullable field is required during creation unless a metadata default supplies its value.
-::
+| Type | Expected runtime value |
+| --- | --- |
+| `uuid`, `string`, `text`, `date` | string |
+| `integer` | integer number |
+| `bigint` | bigint |
+| `boolean` | boolean |
+| `timestamp` | Date |
+| `json` | any value |
+| `decimal` | string or number |
 
 ## Defaults
 
-::u-tabs
-  :::u-tab{label="Static value" icon="i-tabler-equal"}
-  ```ts
-  default: 'draft'
-  ```
-  :::
+```ts
+// Static
+default: 'draft'
 
-  :::u-tab{label="Factory function" icon="i-tabler-function"}
-  ```ts
-  default: () => crypto.randomUUID()
-  ```
-  :::
-::
+// Evaluated for each creation
+default: () => crypto.randomUUID()
+```
 
-Default functions are evaluated during creation. The Drizzle adapter also maps them when it builds runtime tables.
+The Query Engine applies missing defaults before before-create hooks. The Drizzle adapter also maps defaults when building its runtime table.
 
 ## Registry lifecycle
 
 ::u-steps{level="3"}
-### Create a registry
+### Create
 
 ```ts
 const registry = createMetadataRegistry()
 ```
 
-### Register every table
+### Register all tables
 
 ```ts
-registry.register(usersMetadata)
-registry.register(projectsMetadata)
+registry.register(users)
+registry.register(projects)
 ```
 
-### Inspect validation errors when needed
+Registration rejects duplicate logical table names immediately.
+
+### Validate
 
 ```ts
 const errors = registry.validate()
 ```
 
-### Lock the schema
+Validation returns every discovered `RegistryValidationError` without changing registry state.
+
+### Lock
 
 ```ts
 registry.lock()
 ```
+
+`lock()` validates and throws one aggregated schema error when necessary. A locked registry rejects further registrations.
 ::
 
-After `lock()`, any new `register()` call throws an error.
+## Registry invariants
 
-## What the registry validates
+The registry verifies:
 
-::u-accordion
-  :::u-accordion-item{label="Table identity" icon="i-tabler-table"}
-  Duplicate logical table names are rejected during registration, while duplicate physical collection names are reported during validation.
-  :::
-
-  :::u-accordion-item{label="Columns" icon="i-tabler-columns"}
-  The registry checks duplicate logical fields, duplicate physical column names, and the presence of at least one primary key.
-  :::
-
-  :::u-accordion-item{label="Relations" icon="i-tabler-link"}
-  Relation names, target tables, source fields, target fields, junction tables, and junction fields are verified.
-  :::
-::
+- physical collection names are unique;
+- logical and physical column names are unique within a table;
+- every table has at least one primary key;
+- relation names are unique within their source table;
+- relation targets are registered;
+- source and target fields exist;
+- many-to-many junction tables and fields exist.
 
 ::u-callout
 ---
 icon: i-tabler-list-check
-color: primary
+color: info
 variant: subtle
-title: Registration order
 ---
-Relations may point to tables registered later. Register the complete schema before calling `validate()` or `lock()`.
+Register the full model before validating it. A relation target that has not been registered yet is reported as unknown.
 ::
 
-## Registry API
+## Relation metadata
 
-```ts
-registry.has('users')
-registry.get('users')
-registry.getOrThrow('users')
-registry.getAll()
-registry.isLocked()
-```
+::u-tabs
+  :::u-tab{label="To one" icon="i-tabler-arrow-right"}
+  `manyToOne` and `oneToOne` store `foreignKey` on the source and use `references ?? 'id'` on the target.
+  :::
+
+  :::u-tab{label="One to many" icon="i-tabler-git-branch"}
+  `oneToMany` uses `references ?? 'id'` on the source and `foreignKey` on the target.
+  :::
+
+  :::u-tab{label="Many to many" icon="i-tabler-topology-star-3"}
+  `manyToMany` declares a registered junction table with source and target foreign-key fields.
+  :::
+::
 
 ## Composite primary keys
 
-More than one column may be marked as a primary key. For `updateOne()` and `deleteOne()`, the Query Engine loads the target and builds a filter containing every primary-key field.
+Multiple columns may be primary keys. For single-row update and delete operations, the engine builds a filter containing every primary-key value from the loaded entity.
+
+## Metadata and introspection
+
+Declared metadata is richer than introspected metadata. PostgreSQL introspection reconstructs physical tables and columns but cannot currently reconstruct validators, relations, defaults, or unique constraints. This is expected; declared metadata remains the domain source of truth.
