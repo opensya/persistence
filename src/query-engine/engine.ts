@@ -9,6 +9,7 @@ import type { HookContext, MutationOperation } from "../hooks/types.js";
 import type { MetadataRegistry } from "../metadata/registry.js";
 import type { ColumnMetadata, TableMetadata } from "../metadata/types.js";
 import { RelationResolver } from "../relations/resolver.js";
+import { FieldSerializer } from "./serializer.js";
 import {
   UnsafeMutationError,
   ValidationError,
@@ -18,6 +19,7 @@ import {
 
 export interface EngineQueryParams extends QueryParams {
   populate?: string[];
+  context?: QueryContextInput;
 }
 
 export class QueryEngine {
@@ -25,6 +27,7 @@ export class QueryEngine {
     private readonly registry: MetadataRegistry,
     private readonly adapter: DatabaseAdapter,
     private readonly hooks = new HooksRegistry(),
+    private readonly serializer = new FieldSerializer(registry),
   ) {}
 
   async findMany<T = Record<string, unknown>>(
@@ -32,17 +35,24 @@ export class QueryEngine {
     params: EngineQueryParams = {},
   ): Promise<T[]> {
     this.registry.getOrThrow(tableName);
-    const { populate, ...query } = params;
+    const { populate, context = {}, ...query } = params;
     const rows = await this.adapter.findMany<Record<string, unknown>>(
       tableName,
       query,
     );
 
-    if (!populate?.length) return rows as T[];
-    return new RelationResolver(this.registry, this.adapter).populate(
+    const populated = populate?.length
+      ? await new RelationResolver(this.registry, this.adapter).populate(
+          tableName,
+          rows,
+          populate,
+        )
+      : rows;
+
+    return this.serializer.serializeMany(
       tableName,
-      rows,
-      populate,
+      populated,
+      context,
     ) as Promise<T[]>;
   }
 
@@ -51,19 +61,27 @@ export class QueryEngine {
     params: EngineQueryParams = {},
   ): Promise<T | null> {
     this.registry.getOrThrow(tableName);
-    const { populate, ...query } = params;
+    const { populate, context = {}, ...query } = params;
     const row = await this.adapter.findOne<Record<string, unknown>>(
       tableName,
       query,
     );
     if (!row) return null;
-    if (!populate?.length) return row as T;
 
-    const [populated] = await new RelationResolver(
-      this.registry,
-      this.adapter,
-    ).populate(tableName, [row], populate);
-    return populated as T;
+    let populated: Record<string, unknown> = row;
+    if (populate?.length) {
+      const [firstPopulated] = await new RelationResolver(
+        this.registry,
+        this.adapter,
+      ).populate(tableName, [row], populate);
+      populated = firstPopulated ?? row;
+    }
+
+    return this.serializer.serializeOne(
+      tableName,
+      populated,
+      context,
+    ) as Promise<T>;
   }
 
   create<T = Record<string, unknown>>(
@@ -90,7 +108,11 @@ export class QueryEngine {
         resolved,
       );
       await this.hooks.runAfterCreate(tableName, entity, hookContext);
-      return entity as T;
+      return this.serializer.serializeOne(
+        tableName,
+        entity,
+        context,
+      ) as Promise<T>;
     });
   }
 
@@ -129,7 +151,11 @@ export class QueryEngine {
       if (!updated) return null;
 
       await this.hooks.runAfterUpdate(tableName, updated, hookContext);
-      return updated as T;
+      return this.serializer.serializeOne(
+        tableName,
+        updated,
+        context,
+      ) as Promise<T>;
     });
   }
 
@@ -176,7 +202,11 @@ export class QueryEngine {
       for (const updated of updatedRows) {
         await this.hooks.runAfterUpdate(tableName, updated, hookContext);
       }
-      return updatedRows as T[];
+      return this.serializer.serializeMany(
+        tableName,
+        updatedRows,
+        context,
+      ) as Promise<T[]>;
     });
   }
 
@@ -387,6 +417,7 @@ export function createQueryEngine(
   registry: MetadataRegistry,
   adapter: DatabaseAdapter,
   hooks?: HooksRegistry,
+  serializer?: FieldSerializer,
 ): QueryEngine {
-  return new QueryEngine(registry, adapter, hooks);
+  return new QueryEngine(registry, adapter, hooks, serializer);
 }

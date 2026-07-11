@@ -12,6 +12,17 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 ### Added
 
+- **Field visibility & serialization.** `ColumnMetadata` gains `hidden` (always
+  strip the field from results) and `visibility` (an async per-request
+  resolver receiving `{ user, entity, requestId?, tenantId? }`). A new
+  `FieldSerializer` (`src/query-engine/serializer.ts`) applies these rules to
+  every value the `QueryEngine` returns — `findMany`, `findOne`, `create`,
+  `updateOne`, `updateMany` — including recursively into populated relations.
+  This is purely about what appears in results; it has no effect on reads at
+  the adapter level, writes, validation, or lifecycle hooks (hooks still
+  receive the full, unserialized entity). `findMany`/`findOne` now accept an
+  optional `context` (`{ user, requestId?, tenantId? }`), mirroring the one
+  already used by `create`/`update`/`delete`.
 - `IndexMetadata` and an optional `TableMetadata.indexes` field, so composite
   and named single-field indexes can be declared alongside columns.
 - `ConsistencyChecker` now detects drift on composite indexes (missing,
