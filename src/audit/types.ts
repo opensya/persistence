@@ -16,8 +16,8 @@ export interface AuditEntry {
   after: Record<string, unknown> | null;
   changes: Record<string, AuditFieldChange>;
   actor?: unknown;
-  tenantId?: string;
-  requestId?: string;
+  tenantId?: string | undefined;
+  requestId?: string | undefined;
   occurredAt: Date;
 }
 

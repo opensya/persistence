@@ -41,7 +41,10 @@ export class AuditManager {
       id: this.generateId(),
       operation: input.operation,
       table: input.table.name,
-      entityId: this.getEntityId(input.table, input.after ?? input.before ?? {}),
+      entityId: this.getEntityId(
+        input.table,
+        input.after ?? input.before ?? {},
+      ),
       before,
       after,
       changes: this.getChanges(before, after),
