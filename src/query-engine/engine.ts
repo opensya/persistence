@@ -5,6 +5,8 @@ import type {
 } from "../adapter/types.js";
 import { hasFilterConstraints } from "../adapter/types.js";
 import type { AuditManager } from "../audit/manager.js";
+import { DomainEventCollector } from "../events/collector.js";
+import type { DomainEventEmitter, OutboxWriter } from "../events/types.js";
 import { HooksRegistry } from "../hooks/registry.js";
 import type { HookContext, MutationOperation } from "../hooks/types.js";
 import type { MetadataRegistry } from "../metadata/registry.js";
@@ -23,14 +25,45 @@ export interface EngineQueryParams extends QueryParams {
   context?: QueryContextInput;
 }
 
-export class QueryEngine {
+export class QueryEngine<TEvents extends object = Record<string, unknown>> {
   constructor(
     private readonly registry: MetadataRegistry,
     private readonly adapter: DatabaseAdapter,
     private readonly hooks = new HooksRegistry(),
     private readonly serializer = new FieldSerializer(registry),
     private readonly audit?: AuditManager,
+    private readonly outbox?: OutboxWriter,
   ) {}
+
+  transaction<TResult>(
+    context: QueryContextInput,
+    callback: (
+      engine: TransactionalQueryEngine<TEvents>,
+    ) => Promise<TResult>,
+  ): Promise<TResult> {
+    return this.adapter.transaction(async (tx) => {
+      const collector = new DomainEventCollector<TEvents>(context);
+      const engine = new TransactionalQueryEngine<TEvents>(
+        this.registry,
+        tx,
+        this.hooks,
+        this.serializer,
+        this.audit,
+        this.outbox,
+        collector,
+      );
+      const result = await callback(engine);
+      const events = collector.getPendingEvents();
+
+      if (events.length && !this.outbox) {
+        throw new Error(
+          "Domain events were emitted but no OutboxWriter is configured.",
+        );
+      }
+      if (events.length) await this.outbox?.write(events, tx);
+      return result;
+    });
+  }
 
   async findMany<T = Record<string, unknown>>(
     tableName: string,
@@ -478,12 +511,38 @@ export class QueryEngine {
   }
 }
 
-export function createQueryEngine(
+export class TransactionalQueryEngine<
+  TEvents extends object = Record<string, unknown>,
+> extends QueryEngine<TEvents> {
+  constructor(
+    registry: MetadataRegistry,
+    adapter: DatabaseAdapter,
+    hooks: HooksRegistry,
+    serializer: FieldSerializer,
+    audit: AuditManager | undefined,
+    outbox: OutboxWriter | undefined,
+    public readonly events: DomainEventEmitter<TEvents>,
+  ) {
+    super(registry, adapter, hooks, serializer, audit, outbox);
+  }
+}
+
+export function createQueryEngine<
+  TEvents extends object = Record<string, unknown>,
+>(
   registry: MetadataRegistry,
   adapter: DatabaseAdapter,
   hooks?: HooksRegistry,
   serializer?: FieldSerializer,
   audit?: AuditManager,
-): QueryEngine {
-  return new QueryEngine(registry, adapter, hooks, serializer, audit);
+  outbox?: OutboxWriter,
+): QueryEngine<TEvents> {
+  return new QueryEngine<TEvents>(
+    registry,
+    adapter,
+    hooks,
+    serializer,
+    audit,
+    outbox,
+  );
 }
