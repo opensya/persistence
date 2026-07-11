@@ -78,10 +78,9 @@ async function main() {
   registry.register(events);
   registry.lock();
 
-  const pool = new Pool({
-    connectionString:
-      "postgres://postgres:postgres@127.0.0.1:5432/opensya_test",
-  });
+  const DATABASE_URL =
+    "postgresql://neondb_owner:npg_r7TunK8VehUb@ep-round-boat-atobet5f-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+  const pool = new Pool({ connectionString: DATABASE_URL });
   const db = drizzle({ client: pool });
   const adapter = createDrizzleAdapter(db);
   adapter.buildTable(events);

@@ -92,7 +92,7 @@ await engine.create("users", {
 * 🔌 Adapters
 * 🤝 Contributing
 
-👉 **https://docs.opensya.com/persistence**
+👉 **https://opensya.com/persistence**
 
 ---
 
