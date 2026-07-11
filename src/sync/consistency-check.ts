@@ -27,7 +27,7 @@ export class ConsistencyChecker {
 
       if (!actual) {
         issues.push(
-          `Table "${declared.collectionName}" déclarée mais absente en base — migration manquante ?`,
+          `Table "${declared.collectionName}" is declared but missing in the database — pending migration?`,
         );
         drifts.push({ table: declared.name, issues });
         continue;
@@ -56,7 +56,7 @@ export class ConsistencyChecker {
 
       if (!actualColumn) {
         issues.push(
-          `Colonne "${column.columnName}" déclarée mais absente en base.`,
+          `Column "${column.columnName}" is declared but missing in the database.`,
         );
         continue;
       }
@@ -67,7 +67,7 @@ export class ConsistencyChecker {
 
     for (const orphan of actualColumns.values()) {
       issues.push(
-        `Colonne "${orphan.columnName}" présente en base mais non déclarée dans le schema.`,
+        `Column "${orphan.columnName}" exists in the database but is not declared in the schema.`,
       );
     }
   }
@@ -79,22 +79,22 @@ export class ConsistencyChecker {
   ): void {
     if (declared.type !== actual.type) {
       issues.push(
-        `Colonne "${declared.columnName}" : type déclaré "${declared.type}" ≠ type réel "${actual.type}".`,
+        `Column "${declared.columnName}": declared type "${declared.type}" ≠ actual type "${actual.type}".`,
       );
     }
     if (declared.nullable !== actual.nullable) {
       issues.push(
-        `Colonne "${declared.columnName}" : nullable déclaré "${declared.nullable}" ≠ réel "${actual.nullable}".`,
+        `Column "${declared.columnName}": declared nullable "${declared.nullable}" ≠ actual "${actual.nullable}".`,
       );
     }
     if (declared.primaryKey !== actual.primaryKey) {
       issues.push(
-        `Colonne "${declared.columnName}" : primaryKey déclaré "${declared.primaryKey}" ≠ réel "${actual.primaryKey}".`,
+        `Column "${declared.columnName}": declared primaryKey "${declared.primaryKey}" ≠ actual "${actual.primaryKey}".`,
       );
     }
     if (declared.unique !== actual.unique) {
       issues.push(
-        `Colonne "${declared.columnName}" : unique déclaré "${declared.unique}" ≠ réel "${actual.unique}".`,
+        `Column "${declared.columnName}": declared unique "${declared.unique}" ≠ actual "${actual.unique}".`,
       );
     }
   }
@@ -112,7 +112,9 @@ export class ConsistencyChecker {
       const actualIndex = actualByName.get(index.name);
 
       if (!actualIndex) {
-        issues.push(`Index "${index.name}" déclaré mais absent en base.`);
+        issues.push(
+          `Index "${index.name}" is declared but missing in the database.`,
+        );
         continue;
       }
 
@@ -122,7 +124,7 @@ export class ConsistencyChecker {
 
     for (const orphan of actualByName.values()) {
       issues.push(
-        `Index "${orphan.name}" présent en base mais non déclaré dans le schema.`,
+        `Index "${orphan.name}" exists in the database but is not declared in the schema.`,
       );
     }
   }
@@ -134,7 +136,7 @@ export class ConsistencyChecker {
   ): void {
     if (declared.unique !== actual.unique) {
       issues.push(
-        `Index "${declared.name}" : unique déclaré "${declared.unique}" ≠ réel "${actual.unique}".`,
+        `Index "${declared.name}": declared unique "${declared.unique}" ≠ actual "${actual.unique}".`,
       );
     }
 
@@ -144,7 +146,7 @@ export class ConsistencyChecker {
 
     if (!sameFields) {
       issues.push(
-        `Index "${declared.name}" : colonnes déclarées [${declared.fields.join(", ")}] ≠ colonnes réelles [${actual.fields.join(", ")}].`,
+        `Index "${declared.name}": declared fields [${declared.fields.join(", ")}] ≠ actual fields [${actual.fields.join(", ")}].`,
       );
     }
   }

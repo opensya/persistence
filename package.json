@@ -20,6 +20,36 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./metadata": {
+      "types": "./dist/metadata/index.d.ts",
+      "import": "./dist/metadata/index.js",
+      "require": "./dist/metadata/index.cjs"
+    },
+    "./adapter": {
+      "types": "./dist/adapter/index.d.ts",
+      "import": "./dist/adapter/index.js",
+      "require": "./dist/adapter/index.cjs"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.js",
+      "require": "./dist/hooks/index.cjs"
+    },
+    "./relations": {
+      "types": "./dist/relations/index.d.ts",
+      "import": "./dist/relations/index.js",
+      "require": "./dist/relations/index.cjs"
+    },
+    "./sync": {
+      "types": "./dist/sync/index.d.ts",
+      "import": "./dist/sync/index.js",
+      "require": "./dist/sync/index.cjs"
+    },
+    "./query-engine": {
+      "types": "./dist/query-engine/index.d.ts",
+      "import": "./dist/query-engine/index.js",
+      "require": "./dist/query-engine/index.cjs"
     }
   },
   "files": [
