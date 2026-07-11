@@ -125,6 +125,13 @@ export interface IndexMetadata {
   unique: boolean;
 }
 
+export interface AuditMetadata {
+  /** Enables audit entries for mutations on this table. */
+  enabled: boolean;
+  /** Fields removed from both snapshots and computed changes. */
+  excludedFields?: string[];
+}
+
 export interface TableMetadata {
   name: string;
   collectionName: string;
@@ -133,4 +140,6 @@ export interface TableMetadata {
   tableValidators: TableValidatorMetadata[];
   /** Optional for backward compatibility with existing table definitions. */
   indexes?: IndexMetadata[];
+  /** Optional per-table audit configuration. Auditing is disabled by default. */
+  audit?: AuditMetadata;
 }

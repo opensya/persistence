@@ -12,6 +12,19 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 ### Added
 
+- **Transactional audit log.** Tables can opt in with
+  `audit: { enabled: true, excludedFields?: [...] }`. The new `AuditManager`
+  records one entry per created, updated, or deleted entity, including primary
+  key values, before/after snapshots, field-level changes, actor, tenant,
+  request and timestamp. Audit writes receive the same transaction-scoped
+  adapter as the mutation, so a failed audit write rolls the mutation back.
+  Sensitive excluded fields never appear in snapshots or changes. Bulk update
+  and delete operations produce one audit entry per affected entity. The audit
+  API is also available from the `@opensya/persistence/audit` subpath. A
+  `DatabaseAuditWriter` implementation stores entries through any logical
+  audit table registered with the active adapter, and registry validation
+  rejects unknown fields in `excludedFields`. `createAuditLogMetadata()`
+  provides the standard non-recursive `audit_logs` table definition.
 - **Field visibility & serialization.** `ColumnMetadata` gains `hidden` (always
   strip the field from results) and `visibility` (an async per-request
   resolver receiving `{ user, entity, requestId?, tenantId? }`). A new
