@@ -12,6 +12,19 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 ### Added
 
+- **Transactional domain events and outbox.** `QueryEngine` now exposes an
+  application-level `transaction(context, callback)` API. Inside the callback,
+  `tx.events.emit(type, payload, options)` collects strongly typed domain
+  events and writes them to an outbox with the same transaction-scoped adapter
+  as the domain mutations. A failed outbox write rolls back the complete use
+  case. The transport-agnostic API includes `DomainEventCollector`,
+  `DatabaseOutboxWriter`, `createOutboxMetadata()` and the
+  `@opensya/persistence/events` subpath export. `OutboxProcessor` safely claims
+  pending records per worker, publishes them through an injectable
+  `EventPublisher`, retries failures with configurable exponential backoff and
+  marks exhausted events as `failed`. Stale `processing` claims are released
+  automatically after a configurable timeout, providing at-least-once delivery
+  even when a worker stops during publication.
 - **Transactional audit log.** Tables can opt in with
   `audit: { enabled: true, excludedFields?: [...] }`. The new `AuditManager`
   records one entry per created, updated, or deleted entity, including primary

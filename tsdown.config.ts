@@ -15,6 +15,7 @@ export default defineConfig({
     "./src/sync/index.ts",
     "./src/query-engine/index.ts",
     "./src/audit/index.ts",
+    "./src/events/index.ts",
   ],
 
   tsconfig: "./tsconfig.json",
