@@ -1,8 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
-  - name: 📚 Documentation
+  - name: Documentation
     url: https://persistence.opensya.com/
-    about: Check the documentation for usage of OpenSya Persistence.
-  - name: 💬 Discussions
+    about: Read the OpenSya Persistence documentation and guides.
+  - name: Questions and ideas
     url: https://github.com/opensya/persistence/discussions
-    about: Use discussions if you have another issue, an idea for improvement or for asking questions.
+    about: Ask for help, propose an example or discuss an idea before opening an issue.

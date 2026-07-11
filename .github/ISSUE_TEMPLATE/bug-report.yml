@@ -1,49 +1,102 @@
-name: "\U0001F41E Bug report"
-description: Create a report to help us improve Nuxt
+name: "Bug report"
+description: Report a reproducible problem in OpenSya Persistence
+title: "[Bug]: "
 labels: ["pending triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Please carefully read the contribution docs before creating a bug report
-        👉 https://nuxt.com/docs/4.x/community/reporting-bugs
+        Thanks for helping improve OpenSya Persistence.
 
-        Please use a template below to create a minimal reproduction
-        [![Open v4 in Stackblitz](https://img.shields.io/badge/Stackblitz-Nuxt%204-blue?style=flat-square&logo=stackblitz)](https://stackblitz.com/github/nuxt/starter/tree/v4-stackblitz) [![Open v3 in Stackblitz](https://img.shields.io/badge/Stackblitz-Nuxt%203-blue?style=flat-square&logo=stackblitz)](https://stackblitz.com/github/nuxt/starter/tree/v3-stackblitz)
-        [![Open v4 in CodeSandbox](https://img.shields.io/badge/CodeSandbox-Nuxt%204-blue?style=flat-square&logo=codesandbox)](https://codesandbox.io/s/github/nuxt/starter/tree/v4) [![Open v3 in CodeSandbox](https://img.shields.io/badge/CodeSandbox-Nuxt%203-blue?style=flat-square&logo=codesandbox)](https://codesandbox.io/s/github/nuxt/starter/tree/v3)
-  - type: textarea
-    id: bug-env
+        Before submitting, check the documentation and existing issues. A minimal reproduction is required unless the problem is fully demonstrated by the information provided.
+
+  - type: dropdown
+    id: area
     attributes:
-      label: Environment
-      description: You can use `npx nuxt info` to fill this section
-      placeholder: Environment
+      label: Affected area
+      options:
+        - Metadata and type inference
+        - Query Engine and filters
+        - Validation
+        - Lifecycle hooks
+        - Relations
+        - Field visibility and serialization
+        - Audit Log
+        - Domain Events and outbox
+        - Cursor pagination
+        - Drizzle adapter
+        - Schema consistency
+        - Other
     validations:
       required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the information needed to reproduce the same runtime.
+      placeholder: |
+        @opensya/persistence: 0.2.1
+        Node.js: 22.x
+        TypeScript: 5.x
+        Adapter: Drizzle PostgreSQL
+        drizzle-orm: 1.0.0-beta.22
+        PostgreSQL: 17
+        Package manager: pnpm 10
+        Operating system: Linux
+    validations:
+      required: true
+
   - type: textarea
     id: reproduction
     attributes:
-      label: Reproduction
-      description: Please provide a link to a repo that can reproduce the problem you ran into. A [**minimal reproduction**](https://nuxt.com/docs/4.x/community/reporting-bugs#create-a-minimal-reproduction) is required unless you are absolutely sure that the issue is obvious and the provided information is enough to understand the problem. If a report is vague (e.g. just a generic error message) and has no reproduction, it will receive a "need reproduction" label. If no reproduction is provided we might close it.
-      placeholder: Reproduction
+      label: Minimal reproduction
+      description: Provide a repository or a minimal playground scenario that reproduces the problem. Remove unrelated application code and credentials.
+      placeholder: https://github.com/...
     validations:
       required: true
+
   - type: textarea
-    id: bug-description
+    id: steps
     attributes:
-      label: Describe the bug
-      description: A clear and concise description of what the bug is. If you intend to submit a PR for this issue, tell us in the description. Thanks!
-      placeholder: Bug description
+      label: Steps to reproduce
+      description: List the exact operations that trigger the problem.
+      placeholder: |
+        1. Register the metadata...
+        2. Create the Query Engine...
+        3. Execute findOne...
     validations:
       required: true
+
   - type: textarea
-    id: additional
+    id: expected-behavior
     attributes:
-      label: Additional context
-      description: If applicable, add any other context about the problem here
+      label: Expected behavior
+      description: What did you expect Persistence to return or execute?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: Describe what happened instead, including the complete error when applicable.
+    validations:
+      required: true
+
   - type: textarea
     id: logs
     attributes:
       label: Logs
-      description: |
-        Optional if provided reproduction. Please try not to insert an image but copy paste the log text.
-      render: shell-script
+      description: Paste relevant text logs. Remove credentials, connection strings and sensitive data.
+      render: shell
+
+  - type: checkboxes
+    id: final-checks
+    attributes:
+      label: Final checks
+      options:
+        - label: I have removed credentials and sensitive data from the reproduction and logs.
+          required: true
+        - label: I have checked the documentation and existing issues.
+          required: true

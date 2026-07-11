@@ -1,37 +1,82 @@
-name: "🚀 Feature request"
-description: Suggest a feature that will improve Nuxt
+name: "Feature request"
+description: Propose an improvement to OpenSya Persistence
+title: "[Feature]: "
 labels: ["pending triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for taking the time to fill out this feature request!
+        Thanks for suggesting an improvement.
 
-        Please carefully read the contribution docs before suggesting a new feature
-        👉 https://nuxt.com/docs/4.x/community/contribution/#creating-an-issue
-  - type: textarea
-    id: feature-description
+        OpenSya Persistence powers OpenSya and can be used by any TypeScript application. Please describe the underlying persistence problem before proposing an API.
+
+  - type: dropdown
+    id: area
     attributes:
-      label: Describe the feature
-      description: A clear and concise description of what you think would be a helpful addition to Nuxt, including the possible use cases and alternatives you have considered. If you have a working prototype or module that implements it, please include a link.
-      placeholder: Feature description
+      label: Area
+      options:
+        - Metadata and type inference
+        - Query Engine and filters
+        - Validation and lifecycle hooks
+        - Relations
+        - Field visibility and serialization
+        - Audit Log
+        - Domain Events and outbox
+        - Pagination
+        - Database adapters
+        - Schema consistency
+        - Developer experience
+        - Other
     validations:
       required: true
-  - type: checkboxes
-    id: additional-info
+
+  - type: textarea
+    id: problem
     attributes:
-      label: Additional information
-      description: Additional information that helps us decide how to proceed.
-      options:
-        - label: Would you be willing to help implement this feature?
-        - label: Could this feature be implemented as a module?
+      label: Problem or use case
+      description: Describe the concrete problem this feature would solve and who encounters it.
+      placeholder: When building a multi-tenant application, every query must...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or API you would like to see. Include a TypeScript example when useful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain the workarounds or alternative designs you considered.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add links, prototypes, benchmarks or related projects that help evaluate the proposal.
+    validations:
+      required: false
+
   - type: checkboxes
-    id: required-info
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help implement this feature.
+        - label: This could be implemented as a custom adapter or extension outside the core package.
+
+  - type: checkboxes
+    id: final-checks
     attributes:
       label: Final checks
-      description: Before submitting, please make sure you do the following
       options:
-        - label: Read the [contribution guide](https://nuxt.com/docs/4.x/community/contribution).
+        - label: I have read the [contribution guide](https://github.com/opensya/persistence/blob/dev/CONTRIBUTING.md).
           required: true
-        - label: Check existing [discussions](https://github.com/nuxt/nuxt/discussions) and [issues](https://github.com/nuxt/nuxt/issues).
+        - label: I have checked existing [discussions](https://github.com/opensya/persistence/discussions) and [issues](https://github.com/opensya/persistence/issues).
           required: true
