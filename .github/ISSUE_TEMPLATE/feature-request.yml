@@ -1,0 +1,82 @@
+name: "Feature request"
+description: Propose an improvement to OpenSya Persistence
+title: "[Feature]: "
+labels: ["pending triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement.
+
+        OpenSya Persistence powers OpenSya and can be used by any TypeScript application. Please describe the underlying persistence problem before proposing an API.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Metadata and type inference
+        - Query Engine and filters
+        - Validation and lifecycle hooks
+        - Relations
+        - Field visibility and serialization
+        - Audit Log
+        - Domain Events and outbox
+        - Pagination
+        - Database adapters
+        - Schema consistency
+        - Developer experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe the concrete problem this feature would solve and who encounters it.
+      placeholder: When building a multi-tenant application, every query must...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or API you would like to see. Include a TypeScript example when useful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain the workarounds or alternative designs you considered.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add links, prototypes, benchmarks or related projects that help evaluate the proposal.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help implement this feature.
+        - label: This could be implemented as a custom adapter or extension outside the core package.
+
+  - type: checkboxes
+    id: final-checks
+    attributes:
+      label: Final checks
+      options:
+        - label: I have read the [contribution guide](https://github.com/opensya/persistence/blob/dev/CONTRIBUTING.md).
+          required: true
+        - label: I have checked existing [discussions](https://github.com/opensya/persistence/discussions) and [issues](https://github.com/opensya/persistence/issues).
+          required: true

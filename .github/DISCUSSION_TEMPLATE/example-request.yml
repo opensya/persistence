@@ -1,0 +1,56 @@
+title: "[Example]: "
+labels: ["Example Request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new example for OpenSya Persistence.
+
+        Before submitting, please check the documentation and existing discussions to make sure a similar example does not already exist.
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Describe the problem or workflow the example should demonstrate.
+      placeholder: Show how to audit mutations while excluding sensitive fields.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of Persistence should the example cover?
+      options:
+        - Metadata and type inference
+        - Query Engine and filters
+        - Validation and lifecycle hooks
+        - Relations
+        - Field visibility
+        - Audit Log
+        - Domain Events and outbox
+        - Cursor pagination
+        - Drizzle adapter
+        - Custom adapter
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-example
+    attributes:
+      label: Expected example
+      description: Explain what the final example should contain and what readers should learn from it.
+      placeholder: Include the metadata, engine configuration, operation and expected result.
+    validations:
+      required: true
+
+  - type: input
+    id: reference
+    attributes:
+      label: Reference
+      description: Optional link to a repository, discussion or implementation that provides useful context.
+      placeholder: https://github.com/...
+    validations:
+      required: false
