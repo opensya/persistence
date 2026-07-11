@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pretest": "pnpm --dir .. build",
+    "opretest": "pnpm --dir .. build",
     "test": "tsx --env-file=.env src/run-all.ts",
     "test:crud": "tsx --env-file=.env src/scenarios/01-crud-and-validation.ts",
     "test:relations": "tsx --env-file=.env src/scenarios/02-relations-and-serialization.ts",

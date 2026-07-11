@@ -25,7 +25,7 @@ export interface QueryFilter {
 }
 
 export interface QueryParams {
-  where?: QueryFilter;
+  where?: QueryFilter | undefined;
   limit?: number;
   offset?: number;
   orderBy?: { field: string; direction: "asc" | "desc" }[];

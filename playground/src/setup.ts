@@ -24,10 +24,11 @@ export async function createPlayground() {
     );
   }
 
-  const pool = new Pool({ connectionString });
+  const database = drizzle({ connection: { connectionString } });
+  const pool = database.$client;
+
   await resetDatabase(pool);
 
-  const database = drizzle({ client: pool });
   const adapter = createDrizzleAdapter(database);
   for (const metadata of [
     usersMetadata,
