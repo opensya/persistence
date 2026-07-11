@@ -21,18 +21,14 @@ useSeoMeta({
   twitterCard: 'summary_large_image',
 });
 
-const { t } = useMagicKeys();
+const { t, alt } = useMagicKeys();
 const colorMode = useColorMode();
 
-watch(
-  () => t?.value,
-  (v) => {
-    if (v) {
-      colorMode.preference =
-        colorMode.preference === 'light' ? 'dark' : 'light';
-    }
-  },
-);
+watchEffect(() => {
+  if (alt?.value && t?.value) {
+    colorMode.preference = colorMode.preference === 'light' ? 'dark' : 'light';
+  }
+});
 
 provide('navigation', navigation);
 </script>

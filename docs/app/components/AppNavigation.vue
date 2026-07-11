@@ -35,6 +35,9 @@ const navigation = inject<Ref<ContentNavigationItem[]>>('navigation');
         icon="i-simple-icons-linkedin"
         variant="ghost"
         class="border border-default rounded-full"
+        href="https://linkedin.com/in/domutala"
+        target="_blank"
+        square
       />
 
       <UButton

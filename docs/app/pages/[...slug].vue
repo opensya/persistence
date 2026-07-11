@@ -114,7 +114,9 @@ function switchColorMode() {
         <AlgoliaDocSearch v-if="!isOpen" />
 
         <UTooltip>
-          <template #content> Press <UKbd>T</UKbd> to switch </template>
+          <template #content>
+            Press <UKbd>ALT</UKbd>+<UKbd>T</UKbd> to switch
+          </template>
 
           <UButton
             class="rounded-full"
