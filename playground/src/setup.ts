@@ -10,6 +10,7 @@ import {
   createQueryEngine,
 } from "@opensya/persistence";
 import {
+  agendasMetadata,
   auditLogsMetadata,
   outboxEventsMetadata,
   postsMetadata,
@@ -33,13 +34,18 @@ export async function createPlayground() {
   for (const metadata of [
     usersMetadata,
     postsMetadata,
+    agendasMetadata,
     auditLogsMetadata,
     outboxEventsMetadata,
   ]) {
     adapter.buildTable(metadata);
   }
 
-  const registry = createMetadataRegistry(usersMetadata, postsMetadata);
+  const registry = createMetadataRegistry(
+    usersMetadata,
+    postsMetadata,
+    agendasMetadata,
+  );
   registry.lock();
 
   const hooks = createHooksRegistry();
