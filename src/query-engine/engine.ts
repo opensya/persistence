@@ -10,6 +10,11 @@ import type { DomainEventEmitter, OutboxWriter } from "../events/types.js";
 import { HooksRegistry } from "../hooks/registry.js";
 import type { HookContext, MutationOperation } from "../hooks/types.js";
 import type { MetadataRegistry } from "../metadata/registry.js";
+import type {
+  RegisteredTableName,
+  ResolveEntityType,
+  TableMetadataMap,
+} from "../metadata/inference.js";
 import type { ColumnMetadata, TableMetadata } from "../metadata/types.js";
 import { RelationResolver } from "../relations/resolver.js";
 import { FieldSerializer } from "./serializer.js";
@@ -42,9 +47,12 @@ export interface CursorPage<T> {
   pageInfo: CursorPageInfo;
 }
 
-export class QueryEngine<TEvents extends object = Record<string, unknown>> {
+export class QueryEngine<
+  TEvents extends object = Record<string, unknown>,
+  TTables extends TableMetadataMap = Record<never, never>,
+> {
   constructor(
-    private readonly registry: MetadataRegistry,
+    private readonly registry: MetadataRegistry<TTables>,
     private readonly adapter: DatabaseAdapter,
     private readonly hooks = new HooksRegistry(),
     private readonly serializer = new FieldSerializer(registry),
@@ -56,12 +64,12 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
   transaction<TResult>(
     context: QueryContextInput,
     callback: (
-      engine: TransactionalQueryEngine<TEvents>,
+      engine: TransactionalQueryEngine<TEvents, TTables>,
     ) => Promise<TResult>,
   ): Promise<TResult> {
     return this.adapter.transaction(async (tx) => {
       const collector = new DomainEventCollector<TEvents>(context);
-      const engine = new TransactionalQueryEngine<TEvents>(
+      const engine = new TransactionalQueryEngine<TEvents, TTables>(
         this.registry,
         tx,
         this.hooks,
@@ -83,10 +91,13 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
     });
   }
 
-  async findMany<T = Record<string, unknown>>(
-    tableName: string,
+  async findMany<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
     params: EngineQueryParams = {},
-  ): Promise<T[]> {
+  ): Promise<ResolveEntityType<T, TTables, TName>[]> {
     this.registry.getOrThrow(tableName);
     const { populate, context = {}, ...query } = params;
     const rows = await this.adapter.findMany<Record<string, unknown>>(
@@ -106,13 +117,16 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
       tableName,
       populated,
       context,
-    ) as Promise<T[]>;
+    ) as Promise<ResolveEntityType<T, TTables, TName>[]>;
   }
 
-  async findPage<T = Record<string, unknown>>(
-    tableName: string,
+  async findPage<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
     params: CursorPaginationParams = {},
-  ): Promise<CursorPage<T>> {
+  ): Promise<CursorPage<ResolveEntityType<T, TTables, TName>>> {
     const table = this.registry.getOrThrow(tableName);
     const {
       first = 50,
@@ -161,7 +175,7 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
     );
 
     return {
-      data: data as T[],
+      data: data as ResolveEntityType<T, TTables, TName>[],
       pageInfo: {
         hasNextPage,
         endCursor: lastRow ? this.cursor.encode(orderBy, lastRow) : null,
@@ -169,10 +183,13 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
     };
   }
 
-  async findOne<T = Record<string, unknown>>(
-    tableName: string,
+  async findOne<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
     params: EngineQueryParams = {},
-  ): Promise<T | null> {
+  ): Promise<ResolveEntityType<T, TTables, TName> | null> {
     this.registry.getOrThrow(tableName);
     const { populate, context = {}, ...query } = params;
     const row = await this.adapter.findOne<Record<string, unknown>>(
@@ -194,14 +211,17 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
       tableName,
       populated,
       context,
-    ) as Promise<T>;
+    ) as Promise<ResolveEntityType<T, TTables, TName>>;
   }
 
-  create<T = Record<string, unknown>>(
-    tableName: string,
+  create<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
     data: Record<string, unknown>,
     context: QueryContextInput = {},
-  ): Promise<T> {
+  ): Promise<ResolveEntityType<T, TTables, TName>> {
     const table = this.registry.getOrThrow(tableName);
 
     return this.adapter.transaction(async (tx) => {
@@ -233,16 +253,19 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
         tableName,
         entity,
         context,
-      ) as Promise<T>;
+      ) as Promise<ResolveEntityType<T, TTables, TName>>;
     });
   }
 
-  updateOne<T = Record<string, unknown>>(
-    tableName: string,
+  updateOne<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
     where: QueryFilter,
     patch: Record<string, unknown>,
     context: QueryContextInput = {},
-  ): Promise<T | null> {
+  ): Promise<ResolveEntityType<T, TTables, TName> | null> {
     this.assertSafeMutation("update", tableName, where);
     const table = this.registry.getOrThrow(tableName);
 
@@ -284,16 +307,19 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
         tableName,
         updated,
         context,
-      ) as Promise<T>;
+      ) as Promise<ResolveEntityType<T, TTables, TName>>;
     });
   }
 
-  updateMany<T = Record<string, unknown>>(
-    tableName: string,
+  updateMany<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
     where: QueryFilter,
     patch: Record<string, unknown>,
     context: QueryContextInput = {},
-  ): Promise<T[]> {
+  ): Promise<ResolveEntityType<T, TTables, TName>[]> {
     this.assertSafeMutation("update", tableName, where);
     const table = this.registry.getOrThrow(tableName);
 
@@ -346,7 +372,7 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
         tableName,
         updatedRows,
         context,
-      ) as Promise<T[]>;
+      ) as Promise<ResolveEntityType<T, TTables, TName>[]>;
     });
   }
 
@@ -599,9 +625,10 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
 
 export class TransactionalQueryEngine<
   TEvents extends object = Record<string, unknown>,
-> extends QueryEngine<TEvents> {
+  TTables extends TableMetadataMap = Record<never, never>,
+> extends QueryEngine<TEvents, TTables> {
   constructor(
-    registry: MetadataRegistry,
+    registry: MetadataRegistry<TTables>,
     adapter: DatabaseAdapter,
     hooks: HooksRegistry,
     serializer: FieldSerializer,
@@ -615,15 +642,16 @@ export class TransactionalQueryEngine<
 
 export function createQueryEngine<
   TEvents extends object = Record<string, unknown>,
+  TTables extends TableMetadataMap = Record<never, never>,
 >(
-  registry: MetadataRegistry,
+  registry: MetadataRegistry<TTables>,
   adapter: DatabaseAdapter,
   hooks?: HooksRegistry,
   serializer?: FieldSerializer,
   audit?: AuditManager,
   outbox?: OutboxWriter,
-): QueryEngine<TEvents> {
-  return new QueryEngine<TEvents>(
+): QueryEngine<TEvents, TTables> {
+  return new QueryEngine<TEvents, TTables>(
     registry,
     adapter,
     hooks,
