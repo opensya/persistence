@@ -10,7 +10,7 @@ importers:
     dependencies:
       drizzle-orm:
         specifier: 1.0.0-beta.22
-        version: 1.0.0-beta.22
+        version: 1.0.0-beta.22(@types/pg@8.20.0)(pg@8.22.0)
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -51,6 +51,31 @@ importers:
       typescript-eslint:
         specifier: ^8.63.0
         version: 8.63.0(eslint@10.6.0(jiti@2.7.0))(typescript@5.9.3)
+
+  playground:
+    dependencies:
+      '@opensya/persistence':
+        specifier: workspace:*
+        version: link:..
+      drizzle-orm:
+        specifier: 1.0.0-beta.22
+        version: 1.0.0-beta.22(@types/pg@8.20.0)(pg@8.22.0)
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
+      tsx:
+        specifier: ^4.23.0
+        version: 4.23.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
 packages:
 
@@ -1886,7 +1911,10 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  drizzle-orm@1.0.0-beta.22: {}
+  drizzle-orm@1.0.0-beta.22(@types/pg@8.20.0)(pg@8.22.0):
+    optionalDependencies:
+      '@types/pg': 8.20.0
+      pg: 8.22.0
 
   dts-resolver@3.0.0: {}
 

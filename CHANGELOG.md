@@ -12,6 +12,13 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 ### Added
 
+- A standalone `playground` workspace that consumes the built package against
+  a real PostgreSQL database. Its initial independent scenarios cover CRUD,
+  defaults, validation, hooks, safe mutations, relations, recursive field
+  serialization, transactional audit entries, domain-event outbox processing
+  and cursor pagination. It includes typed assertions, isolated schema resets,
+  per-scenario scripts, an environment template and a dedicated PostgreSQL
+  Docker Compose service.
 - **Metadata-driven entity type inference.** `defineTable()` preserves literal
   table names, column names and column types, while a chainable typed
   `MetadataRegistry` carries that schema into `QueryEngine`. Calls such as
