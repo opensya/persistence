@@ -4,6 +4,7 @@ import type {
   QueryParams,
 } from "../adapter/types.js";
 import { hasFilterConstraints } from "../adapter/types.js";
+import type { AuditManager } from "../audit/manager.js";
 import { HooksRegistry } from "../hooks/registry.js";
 import type { HookContext, MutationOperation } from "../hooks/types.js";
 import type { MetadataRegistry } from "../metadata/registry.js";
@@ -28,6 +29,7 @@ export class QueryEngine {
     private readonly adapter: DatabaseAdapter,
     private readonly hooks = new HooksRegistry(),
     private readonly serializer = new FieldSerializer(registry),
+    private readonly audit?: AuditManager,
   ) {}
 
   async findMany<T = Record<string, unknown>>(
@@ -108,6 +110,14 @@ export class QueryEngine {
         resolved,
       );
       await this.hooks.runAfterCreate(tableName, entity, hookContext);
+      await this.audit?.record({
+        operation: "create",
+        table,
+        before: null,
+        after: entity,
+        context,
+        adapter: tx,
+      });
       return this.serializer.serializeOne(
         tableName,
         entity,
@@ -151,6 +161,14 @@ export class QueryEngine {
       if (!updated) return null;
 
       await this.hooks.runAfterUpdate(tableName, updated, hookContext);
+      await this.audit?.record({
+        operation: "update",
+        table,
+        before: current,
+        after: updated,
+        context,
+        adapter: tx,
+      });
       return this.serializer.serializeOne(
         tableName,
         updated,
@@ -202,6 +220,17 @@ export class QueryEngine {
       for (const updated of updatedRows) {
         await this.hooks.runAfterUpdate(tableName, updated, hookContext);
       }
+      for (const [index, updated] of updatedRows.entries()) {
+        const current = this.findMatchingEntity(table, currentRows, updated);
+        await this.audit?.record({
+          operation: "update",
+          table,
+          before: current ?? currentRows[index] ?? null,
+          after: updated,
+          context,
+          adapter: tx,
+        });
+      }
       return this.serializer.serializeMany(
         tableName,
         updatedRows,
@@ -233,6 +262,16 @@ export class QueryEngine {
       );
       const count = await tx.delete(tableName, primaryKeyFilter);
       await this.hooks.runAfterDelete(tableName, hookContext);
+      if (count > 0) {
+        await this.audit?.record({
+          operation: "delete",
+          table,
+          before: current,
+          after: null,
+          context,
+          adapter: tx,
+        });
+      }
       return count > 0;
     });
   }
@@ -246,10 +285,23 @@ export class QueryEngine {
     const table = this.registry.getOrThrow(tableName);
 
     return this.adapter.transaction(async (tx) => {
+      const currentRows = this.audit?.isEnabled(table)
+        ? await tx.findMany<Record<string, unknown>>(tableName, { where })
+        : [];
       const hookContext = this.createHookContext(table, "delete", tx, context);
       await this.hooks.runBeforeDelete(tableName, where, hookContext);
       const count = await tx.delete(tableName, where);
       await this.hooks.runAfterDelete(tableName, hookContext);
+      for (const current of currentRows) {
+        await this.audit?.record({
+          operation: "delete",
+          table,
+          before: current,
+          after: null,
+          context,
+          adapter: tx,
+        });
+      }
       return count;
     });
   }
@@ -387,6 +439,19 @@ export class QueryEngine {
     return { conditions };
   }
 
+  private findMatchingEntity(
+    table: TableMetadata,
+    entities: Record<string, unknown>[],
+    target: Record<string, unknown>,
+  ): Record<string, unknown> | undefined {
+    const primaryKeys = table.columns.filter((column) => column.primaryKey);
+    return entities.find((entity) =>
+      primaryKeys.every((column) =>
+        Object.is(entity[column.name], target[column.name]),
+      ),
+    );
+  }
+
   private assertSafeMutation(
     operation: "update" | "delete",
     tableName: string,
@@ -418,6 +483,7 @@ export function createQueryEngine(
   adapter: DatabaseAdapter,
   hooks?: HooksRegistry,
   serializer?: FieldSerializer,
+  audit?: AuditManager,
 ): QueryEngine {
-  return new QueryEngine(registry, adapter, hooks, serializer);
+  return new QueryEngine(registry, adapter, hooks, serializer, audit);
 }

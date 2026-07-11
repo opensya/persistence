@@ -53,6 +53,7 @@ export class MetadataRegistry {
       }
       collectionNames.add(table.collectionName);
       this.validateColumns(table, errors);
+      this.validateAudit(table, errors);
       this.validateRelations(table, errors);
     }
 
@@ -122,6 +123,23 @@ export class MetadataRegistry {
       }
 
       this.validateRelationFields(table, target, relation, errors);
+    }
+  }
+
+  private validateAudit(
+    table: TableMetadata,
+    errors: RegistryValidationError[],
+  ): void {
+    const knownFields = new Set(table.columns.map((column) => column.name));
+    const excludedFields = table.audit?.excludedFields ?? [];
+
+    for (const field of new Set(excludedFields)) {
+      if (!knownFields.has(field)) {
+        errors.push({
+          table: table.name,
+          message: `Audit configuration excludes unknown field "${field}".`,
+        });
+      }
     }
   }
 
