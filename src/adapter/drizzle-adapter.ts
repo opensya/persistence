@@ -21,18 +21,24 @@ import {
   bigint,
   boolean,
   date,
+  index,
   integer,
   json,
   numeric,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   type PgAsyncDatabase,
   type PgColumnBuilder,
   type PgTableWithColumns,
 } from "drizzle-orm/pg-core";
-import type { ColumnMetadata, TableMetadata } from "../metadata/types.js";
+import type {
+  ColumnMetadata,
+  IndexMetadata,
+  TableMetadata,
+} from "../metadata/types.js";
 import {
   hasFilterConstraints,
   type DatabaseAdapter,
@@ -63,7 +69,27 @@ export class DrizzleAdapter implements DatabaseAdapter {
       columns[column.name] = this.buildColumn(column);
     }
 
-    const table = pgTable(meta.collectionName, columns) as BuiltTable;
+    const indexes = meta.indexes ?? [];
+    const table = pgTable(meta.collectionName, columns, (t) =>
+      indexes.map((declared) => {
+        if (declared.fields.length === 0) {
+          throw new Error(`Index "${declared.name}" has no fields.`);
+        }
+        const builder = declared.unique
+          ? uniqueIndex(declared.name)
+          : index(declared.name);
+        // `.on()` is typed as a variadic tuple (at least one column); the
+        // length check above guarantees that invariant at runtime, TS just
+        // can't see it through `.map()` on a plain string[].
+        const indexedColumns = declared.fields.map((field) => t[field]) as [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ...any[],
+        ];
+        return builder.on(...indexedColumns);
+      }),
+    ) as BuiltTable;
     this.tables.set(meta.name, table);
     return table;
   }
@@ -156,12 +182,11 @@ export class DrizzleAdapter implements DatabaseAdapter {
   }
 
   /**
-   * Real introspection via information_schema — independent from any
-   * Drizzle schema already built (works even for tables never passed to
-   * buildTable()).
+   * Real introspection via information_schema and the pg_catalog index
+   * tables — independent from any Drizzle schema already built (works even
+   * for tables never passed to buildTable()).
    *
    * Known limitations for this first pass:
-   * - `unique` is not introspected (always false)
    * - relations (foreign keys) are not introspected (always [])
    * - unrecognized SQL types fall back to 'text'
    */
@@ -196,13 +221,60 @@ export class DrizzleAdapter implements DatabaseAdapter {
         pkResult.rows.map((r) => r.column_name),
       );
 
+      // Every index on the table, PK included — pg_index is the single
+      // source of truth Postgres uses internally for both explicit
+      // `CREATE INDEX` statements and the indexes backing PRIMARY KEY /
+      // UNIQUE constraints, so this one query covers all three.
+      const indexResult = (await this.db.execute(sql`
+        SELECT
+          ic.relname AS index_name,
+          ix.indisunique AS is_unique,
+          ix.indisprimary AS is_primary,
+          array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) AS columns
+        FROM pg_class tc
+        JOIN pg_namespace n ON n.oid = tc.relnamespace
+        JOIN pg_index ix ON tc.oid = ix.indrelid
+        JOIN pg_class ic ON ic.oid = ix.indexrelid
+        JOIN pg_attribute a ON a.attrelid = tc.oid AND a.attnum = ANY(ix.indkey)
+        WHERE n.nspname = 'public' AND tc.relname = ${tableName}
+        GROUP BY ic.relname, ix.indisunique, ix.indisprimary
+      `)) as {
+        rows: {
+          index_name: string;
+          is_unique: boolean;
+          is_primary: boolean;
+          columns: string[];
+        }[];
+      };
+
+      // A single-column unique index that isn't the PK is exactly what a
+      // column-level UNIQUE constraint produces in Postgres — surface it
+      // through ColumnMetadata.unique rather than as a standalone index.
+      const singleColumnUniques = new Set(
+        indexResult.rows
+          .filter(
+            (row) =>
+              row.is_unique && !row.is_primary && row.columns.length === 1,
+          )
+          .map((row) => row.columns[0]),
+      );
+
+      const indexes: IndexMetadata[] = indexResult.rows
+        .filter((row) => !row.is_primary)
+        .filter((row) => !(row.is_unique && row.columns.length === 1))
+        .map((row) => ({
+          name: row.index_name,
+          fields: row.columns,
+          unique: row.is_unique,
+        }));
+
       const columns: ColumnMetadata[] = columnsResult.rows.map((row) => ({
         name: row.column_name,
         columnName: row.column_name,
         type: this.mapSqlTypeToColumnType(row.data_type),
         nullable: row.is_nullable === "YES",
         primaryKey: primaryKeyColumns.has(row.column_name),
-        unique: false,
+        unique: singleColumnUniques.has(row.column_name),
         validators: [],
       }));
 
@@ -212,6 +284,7 @@ export class DrizzleAdapter implements DatabaseAdapter {
         columns,
         relations: [],
         tableValidators: [],
+        indexes,
       });
     }
 

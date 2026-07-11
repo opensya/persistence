@@ -5,4 +5,5 @@ export * from "./relations/index.js";
 export * from "./sync/index.js";
 export * from "./query-engine/index.js";
 
-export const OPENSYA_DATABASE_VERSION = "0.0.1";
+export const OPENSYA_DATABASE_VERSION: string =
+  process.env.OPENSYA_PERSISTENCE_VERSION ?? "0.0.0-dev";

@@ -81,10 +81,20 @@ export interface TableValidatorMetadata {
   ) => ValidationResult | Promise<ValidationResult>;
 }
 
+export interface IndexMetadata {
+  /** Must be unique across the database — becomes the SQL index name. */
+  name: string;
+  /** Field names (not column names), in index order. */
+  fields: string[];
+  unique: boolean;
+}
+
 export interface TableMetadata {
   name: string;
   collectionName: string;
   columns: ColumnMetadata[];
   relations: RelationMetadata[];
   tableValidators: TableValidatorMetadata[];
+  /** Optional for backward compatibility with existing table definitions. */
+  indexes?: IndexMetadata[];
 }

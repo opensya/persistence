@@ -1,4 +1,9 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "tsdown";
+
+const pkg = JSON.parse(readFileSync("./package.json", "utf8")) as {
+  version: string;
+};
 
 export default defineConfig({
   entry: ["./src/index.ts"],
@@ -9,6 +14,12 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   unbundle: true,
+
+  // Makes OPENSYA_DATABASE_VERSION (src/index.ts) track package.json
+  // automatically, so the two can never drift apart again.
+  env: {
+    OPENSYA_PERSISTENCE_VERSION: pkg.version,
+  },
 
   outExtensions: (ctx) => {
     return {
