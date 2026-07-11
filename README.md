@@ -9,6 +9,7 @@ OpenSya Persistence
 </h1>
 
 <p align="center">A metadata-driven persistence engine for TypeScript applications, powering <a href="https://opensya.com" target="_blank">OpenSya</a>.</p>
+<br />
 
 ## Description
 
