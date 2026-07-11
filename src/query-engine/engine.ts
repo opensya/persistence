@@ -13,6 +13,7 @@ import type { MetadataRegistry } from "../metadata/registry.js";
 import type { ColumnMetadata, TableMetadata } from "../metadata/types.js";
 import { RelationResolver } from "../relations/resolver.js";
 import { FieldSerializer } from "./serializer.js";
+import { CursorCodec } from "./cursor.js";
 import {
   UnsafeMutationError,
   ValidationError,
@@ -25,6 +26,22 @@ export interface EngineQueryParams extends QueryParams {
   context?: QueryContextInput;
 }
 
+export interface CursorPaginationParams
+  extends Omit<EngineQueryParams, "limit" | "offset"> {
+  first?: number;
+  after?: string;
+}
+
+export interface CursorPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
+
+export interface CursorPage<T> {
+  data: T[];
+  pageInfo: CursorPageInfo;
+}
+
 export class QueryEngine<TEvents extends object = Record<string, unknown>> {
   constructor(
     private readonly registry: MetadataRegistry,
@@ -33,6 +50,7 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
     private readonly serializer = new FieldSerializer(registry),
     private readonly audit?: AuditManager,
     private readonly outbox?: OutboxWriter,
+    private readonly cursor = new CursorCodec(),
   ) {}
 
   transaction<TResult>(
@@ -89,6 +107,66 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
       populated,
       context,
     ) as Promise<T[]>;
+  }
+
+  async findPage<T = Record<string, unknown>>(
+    tableName: string,
+    params: CursorPaginationParams = {},
+  ): Promise<CursorPage<T>> {
+    const table = this.registry.getOrThrow(tableName);
+    const {
+      first = 50,
+      after,
+      populate,
+      context = {},
+      orderBy: requestedOrder,
+      where,
+    } = params;
+    this.assertPageSize(first);
+
+    const orderBy = this.cursor.normalizeOrder(table, requestedOrder);
+    const cursorFilter = after
+      ? this.cursor.buildAfterFilter(
+          orderBy,
+          this.cursor.decode(after, orderBy),
+        )
+      : undefined;
+    const mergedWhere = cursorFilter
+      ? where
+        ? { and: [where, cursorFilter] }
+        : cursorFilter
+      : where;
+    const rows = await this.adapter.findMany<Record<string, unknown>>(
+      tableName,
+      {
+        where: mergedWhere,
+        orderBy,
+        limit: first + 1,
+      },
+    );
+    const hasNextPage = rows.length > first;
+    const pageRows = hasNextPage ? rows.slice(0, first) : rows;
+    const lastRow = pageRows.at(-1);
+    const populated = populate?.length
+      ? await new RelationResolver(this.registry, this.adapter).populate(
+          tableName,
+          pageRows,
+          populate,
+        )
+      : pageRows;
+    const data = await this.serializer.serializeMany(
+      tableName,
+      populated,
+      context,
+    );
+
+    return {
+      data: data as T[],
+      pageInfo: {
+        hasNextPage,
+        endCursor: lastRow ? this.cursor.encode(orderBy, lastRow) : null,
+      },
+    };
   }
 
   async findOne<T = Record<string, unknown>>(
@@ -492,6 +570,14 @@ export class QueryEngine<TEvents extends object = Record<string, unknown>> {
   ): void {
     if (!hasFilterConstraints(where)) {
       throw new UnsafeMutationError(operation, tableName);
+    }
+  }
+
+  private assertPageSize(first: number): void {
+    if (!Number.isInteger(first) || first < 1 || first > 100) {
+      throw new RangeError(
+        'Cursor pagination parameter "first" must be an integer between 1 and 100.',
+      );
     }
   }
 
