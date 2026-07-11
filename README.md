@@ -1,111 +1,50 @@
-# OpenSya Persistence
 
-> **Execute your domain.**
->
-> *The persistence engine behind OpenSya.*
+<br />
+<p align="center">
+  <a href="https://persistence.opensya.com/" target="_blank"><img src="./docs/public/favicon.svg" width="120" alt="OpenSya Persistence Logo" /></a>
+</p>
 
-OpenSya Persistence is a metadata-driven persistence engine originally built for the OpenSya platform.
+<h1 align="center">
+OpenSya Persistence
+</h1>
 
-It orchestrates validation, relationships, lifecycle hooks and transactions while remaining independent from the underlying database.
+<p align="center">A metadata-driven persistence engine for TypeScript applications, powering <a href="https://opensya.com" target="_blank">OpenSya</a>.</p>
 
-Use it with Drizzle today, or implement your own adapter tomorrow.
+## Description
 
----
+OpenSya Persistence gives TypeScript applications a consistent runtime for executing domain rules around data.
 
-## Why?
+It handles type inference, validation, relations, lifecycle hooks, transactions, audit logs and domain events while remaining framework-agnostic and independent from the underlying database.
 
-ORMs are great at talking to databases.
+OpenSya Persistence powers OpenSya, but can be used in any JavaScript or TypeScript application.
 
-Applications need much more.
+## Philosophy
 
-OpenSya Persistence sits between your application and your database to execute your domain consistently.
+- **Define once**
 
-```text
-                Your Application
-                       │
-                       ▼
-            OpenSya Persistence
-                       │
-                       ▼
-             Database Adapter
-                       │
-                       ▼
-                 PostgreSQL
-```
+Metadata is the source of truth for types, validation, relations and runtime behavior.
 
-It doesn't replace your ORM.
+- **Execute consistently**
 
-It gives your ORM a runtime.
+Every operation follows the same domain rules, regardless of where it is executed.
 
----
+- **Stay in control**
+
+Persistence works above the database adapter. Use Drizzle today, or provide your own adapter tomorrow.
 
 ## Features
 
-* Metadata-driven schema
+* Metadata-driven, strongly typed entities
 * Database-independent Query Engine
-* Validation
-* Lifecycle hooks
-* Relationship resolver
-* Automatic transactions
-* Safe mutations
-* Adapter architecture
+* Validation and lifecycle hooks
+* Explicit relation population
+* Safe transactional mutations
+* Field visibility and serialization
+* Transactional audit logs and domain events
+* Stable cursor pagination
+* Drizzle PostgreSQL adapter
 
 ---
 
-## Installation
-
-```bash
-pnpm add @opensya/persistence
-pnpm add drizzle-orm
-```
-
----
-
-## Quick Example
-
-```ts
-const registry = createMetadataRegistry();
-
-registry.register(users);
-
-registry.lock();
-
-const adapter = createDrizzleAdapter(db);
-
-const engine = createQueryEngine(
-    registry,
-    adapter,
-);
-
-await engine.create("users", {
-    email: "john@example.com",
-});
-```
-
----
-
-## Documentation
-
-* 📖 Architecture
-* 🚀 Getting Started
-* 📚 Guides
-* 🔌 Adapters
-* 🤝 Contributing
-
-👉 **https://opensya.com/persistence**
-
----
-
-## Roadmap
-
-* Authorization
-* Audit Log
-* Multi-tenancy
-* Domain Events
-* Generated APIs
-
----
-
-## License
-
-MIT
+* Documentation **https://persistence.opensya.com**
+* License [MIT licensed](LICENSE).

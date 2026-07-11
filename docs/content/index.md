@@ -1,12 +1,12 @@
 ---
 title: OpenSya Persistence
-description: The metadata-driven persistence engine built for OpenSya.
+description: A metadata-driven persistence engine for TypeScript applications, powering OpenSya.
 navigation: false
 ---
 
 # OpenSya Persistence
 
-The persistence engine built for OpenSya.
+The persistence engine behind OpenSya, available to any TypeScript application.
 
 Declare the domain once. Persistence executes validation, relations, lifecycle
 hooks, transactions, audit trails and domain events consistently, while the

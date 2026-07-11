@@ -31,14 +31,14 @@ const navigation = inject<Ref<ContentNavigationItem[]>>('navigation');
     <div
       class="mt-auto sticky bottom-0 bg-default z-10 border-t border-t-default p-5 flex items-center gap-2"
     >
-      <UButton
+      <!-- <UButton
         icon="i-simple-icons-linkedin"
         variant="ghost"
         class="border border-default rounded-full"
         href="https://linkedin.com/in/domutala"
         target="_blank"
         square
-      />
+      /> -->
 
       <UButton
         variant="ghost"
