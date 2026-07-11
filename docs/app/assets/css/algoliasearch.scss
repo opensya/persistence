@@ -1,0 +1,37 @@
+:root {
+  --docsearch-search-button-background: transparent !important;
+  --docsearch-primary-color: var(--ui-primary) !important;
+  --docsearch-highlight-color: var(--ui-primary) !important;
+  --docsearch-logo-color: var(--ui-primary) !important;
+  --docsearch-muted-color: var(--ui-text-muted) !important;
+  --docsearch-text-color: var(--ui-text) !important;
+  --docsearch-container-background: rgba(
+    var(--ui-bg-elevated),
+    0.75
+  ) !important;
+
+  --docsearch-background-color: var(--ui-bg-elevated) !important;
+  --docsearch-secondary-text-color: var(--ui-text) !important;
+
+  --docsearch-modal-background: var(--ui-bg) !important;
+  --docsearch-searchbox-background: var(--ui-bg) !important;
+  --docsearch-footer-background: var(--ui-bg) !important;
+  --docsearch-hit-background: var(--ui-bg-elevated) !important;
+
+  --docsearch-searchbox-focus-background: var(--ui-bg) !important;
+  --docsearch-subtle-color: var(--ui-bg-elevated) !important;
+
+  --docsearch-key-background: var(--ui-bg-elevated) !important;
+}
+
+.DocSearch-Modal {
+  border: 1px solid var(--ui-border);
+}
+
+.DocSearch-Footer {
+  border-block-start-color: var(--ui-border) !important;
+}
+
+.DocSearch-Button {
+  border-block-start-color: var(--ui-border) !important;
+}

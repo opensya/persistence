@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+@source "../../../content/**/*";
+
+@import './scroll.scss';
+@import './algoliasearch.scss';
+
+@theme static {
+  --container-8xl: 90rem;
+  --font-sans: 'Public Sans', sans-serif;
+
+  /* --color-blue-50: #e6e6ff;
+  --color-blue-100: #d1d0ff;
+  --color-blue-200: #9f9fff;
+  --color-blue-300: #706fff;
+  --color-blue-400: #3935ff;
+  --color-blue-500: #0900c2;
+  --color-blue-600: #0600a5;
+  --color-blue-700: #040085;
+  --color-blue-800: #020067;
+  --color-blue-900: #01004e;
+  --color-blue-950: #010031; */
+}
+
+:root {
+  --ui-container: var(--container-8xl);
+  /* --ui-header-height: calc(var(--spacing) * 12); */
+}
+
+:root {
+  --ui-radius: 0.25rem;
+  --ui-primary: black;
+}
+
+.dark {
+  --ui-primary: white;
+}

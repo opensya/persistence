@@ -1,0 +1,62 @@
+---
+title: Field visibility
+description: Remove hidden and context-sensitive fields from every engine result.
+navigation:
+  icon: i-tabler-eye-off
+---
+
+Visibility controls serialization, not storage. Validators, hooks and the
+database adapter still receive complete entities; callers receive filtered ones.
+
+## Always hidden
+
+```ts
+{
+  name: 'password',
+  columnName: 'password',
+  type: 'string',
+  nullable: false,
+  primaryKey: false,
+  unique: false,
+  hidden: true,
+  validators: []
+}
+```
+
+`hidden` fields are removed from `findMany`, `findOne`, `findPage`, `create`,
+`updateOne` and `updateMany`. They are also removed inside populated relations.
+Type inference excludes them from returned entities.
+
+## Contextual visibility
+
+```ts
+{
+  name: 'salary',
+  // ...
+  visibility({ user, entity, tenantId }) {
+    return canViewSalary(user, entity, tenantId)
+  }
+}
+```
+
+Pass the visibility context on reads:
+
+```ts
+const employee = await engine.findOne('employees', {
+  where: byId(id),
+  context: { user: actor, tenantId, requestId }
+})
+```
+
+Resolvers run per entity and may be asynchronous. Dynamically visible fields
+are optional in the inferred result because their presence depends on context.
+
+::callout
+---
+icon: i-tabler-shield-exclamation
+color: warning
+variant: subtle
+---
+Visibility is not write authorization. A hidden field can still be written.
+Use hooks or a dedicated authorization layer to control mutations.
+::

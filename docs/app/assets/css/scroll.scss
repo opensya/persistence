@@ -1,0 +1,27 @@
+.w-scroll,
+.w-scroll-permanent {
+  --scroll-width: 7px;
+
+  overflow: auto;
+
+  &::-webkit-scrollbar {
+    width: var(--scroll-width);
+    transition: all 0.5s ease;
+  }
+
+  &:not(.w-scroll-permanent) {
+    &::-webkit-scrollbar {
+      width: 0;
+    }
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--ui-border);
+  }
+
+  &:hover {
+    &::-webkit-scrollbar {
+      width: var(--scroll-width);
+    }
+  }
+}
