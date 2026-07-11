@@ -12,6 +12,14 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 ### Added
 
+- **Cursor pagination.** `QueryEngine.findPage()` returns `{ data, pageInfo }`
+  with an opaque `endCursor` and `hasNextPage`. Requested ordering is made
+  deterministic by automatically appending missing primary-key fields, and
+  cursors carry their ordering signature to prevent reuse with incompatible
+  queries. Compound ascending/descending keyset filters, `Date` and `bigint`
+  cursor values, populated relations and field serialization are supported.
+  Page sizes default to 50 and are constrained to 1–100. Ordering fields must
+  be non-null for cursor creation.
 - **Transactional domain events and outbox.** `QueryEngine` now exposes an
   application-level `transaction(context, callback)` API. Inside the callback,
   `tx.events.emit(type, payload, options)` collects strongly typed domain
