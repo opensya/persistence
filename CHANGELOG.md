@@ -12,6 +12,15 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 ### Added
 
+- **Metadata-driven entity type inference.** `defineTable()` preserves literal
+  table names, column names and column types, while a chainable typed
+  `MetadataRegistry` carries that schema into `QueryEngine`. Calls such as
+  `engine.findOne("users")`, `create`, `findMany`, `findPage`, `updateOne` and
+  `updateMany` now infer their entity type without an explicit generic. The
+  inference maps persistence types to TypeScript primitives, includes `null`
+  for nullable columns, removes fields declared `hidden: true`, and makes
+  fields with dynamic `visibility` optional. Explicit generics remain
+  supported for backward compatibility.
 - **Cursor pagination.** `QueryEngine.findPage()` returns `{ data, pageInfo }`
   with an opaque `endCursor` and `hasNextPage`. Requested ordering is made
   deterministic by automatically appending missing primary-key fields, and

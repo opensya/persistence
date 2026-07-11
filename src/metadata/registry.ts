@@ -1,15 +1,23 @@
 import type { RelationMetadata, TableMetadata } from "./types.js";
+import type {
+  TableMetadataMap,
+  TablesToMetadataMap,
+} from "./inference.js";
 
 export interface RegistryValidationError {
   table: string;
   message: string;
 }
 
-export class MetadataRegistry {
+export class MetadataRegistry<
+  TTables extends TableMetadataMap = Record<never, never>,
+> {
   private readonly tables = new Map<string, TableMetadata>();
   private locked = false;
 
-  register(table: TableMetadata): void {
+  register<const TTable extends TableMetadata>(
+    table: TTable,
+  ): MetadataRegistry<TTables & Record<TTable["name"], TTable>> {
     if (this.locked) {
       throw new Error(`Cannot register "${table.name}": registry is locked.`);
     }
@@ -17,6 +25,9 @@ export class MetadataRegistry {
       throw new Error(`Table "${table.name}" is already registered.`);
     }
     this.tables.set(table.name, table);
+    return this as unknown as MetadataRegistry<
+      TTables & Record<TTable["name"], TTable>
+    >;
   }
 
   get(name: string): TableMetadata | undefined {
@@ -209,6 +220,10 @@ export class MetadataRegistry {
   }
 }
 
-export function createMetadataRegistry(): MetadataRegistry {
-  return new MetadataRegistry();
+export function createMetadataRegistry<
+  const TTables extends readonly TableMetadata[] = [],
+>(...tables: TTables): MetadataRegistry<TablesToMetadataMap<TTables>> {
+  const registry = new MetadataRegistry<TablesToMetadataMap<TTables>>();
+  for (const table of tables) registry.register(table);
+  return registry;
 }
