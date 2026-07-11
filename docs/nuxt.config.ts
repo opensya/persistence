@@ -66,17 +66,17 @@ export default defineNuxtConfig({
     },
   },
 
-  // algolia: {
-  //   applicationId: process.env.NUXT_PUBLIC_ALGOLIA_APP_ID!,
-  //   apiKey: process.env.NUXT_PUBLIC_ALGOLIA_SEARCH_API_KEY!,
+  algolia: {
+    applicationId: process.env.NUXT_PUBLIC_ALGOLIA_APP_ID!,
+    apiKey: process.env.NUXT_PUBLIC_ALGOLIA_SEARCH_API_KEY!,
 
-  //   docSearch: {
-  //     applicationId: process.env.NUXT_PUBLIC_ALGOLIA_APP_ID!,
-  //     apiKey: process.env.NUXT_PUBLIC_ALGOLIA_SEARCH_API_KEY,
-  //     indexName: process.env.NUXT_PUBLIC_ALGOLIA_INDEX_NAME,
-  //     placeholder: 'Search ...',
-  //   },
-  // },
+    docSearch: {
+      applicationId: process.env.NUXT_PUBLIC_ALGOLIA_APP_ID!,
+      apiKey: process.env.NUXT_PUBLIC_ALGOLIA_SEARCH_API_KEY,
+      indexName: process.env.NUXT_PUBLIC_ALGOLIA_INDEX_NAME,
+      placeholder: 'Search ...',
+    },
+  },
 
   eslint: {
     config: {

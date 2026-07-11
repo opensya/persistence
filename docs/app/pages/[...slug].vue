@@ -111,7 +111,7 @@ function switchColorMode() {
       </template>
 
       <template #right>
-        <!-- <AlgoliaDocSearch v-if="!isOpen" /> -->
+        <AlgoliaDocSearch v-if="!isOpen" />
 
         <UTooltip>
           <template #content> Press <UKbd>T</UKbd> to switch </template>
