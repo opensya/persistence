@@ -1,0 +1,24 @@
+{
+  "name": "@opensya/persistence-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "opretest": "pnpm --dir .. build",
+    "test": "tsx --env-file=.env src/run-all.ts",
+    "test:crud": "tsx --env-file=.env src/scenarios/01-crud-and-validation.ts",
+    "test:relations": "tsx --env-file=.env src/scenarios/02-relations-and-serialization.ts",
+    "test:audit-events": "tsx --env-file=.env src/scenarios/03-audit-and-domain-events.ts",
+    "test:pagination": "tsx --env-file=.env src/scenarios/04-cursor-pagination.ts"
+  },
+  "dependencies": {
+    "@opensya/persistence": "workspace:*",
+    "drizzle-orm": "1.0.0-beta.22",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -22,6 +22,23 @@ export interface FieldValidatorMetadata {
   ) => ValidationResult | Promise<ValidationResult>;
 }
 
+/**
+ * Context passed to a field's `visibility` resolver. Distinct from
+ * `HookContext`/`QueryContextInput` (lifecycle hooks, mutations) because
+ * this one is specifically about deciding what a *result* looks like —
+ * it always carries the entity the field belongs to.
+ */
+export interface FieldVisibilityContext {
+  user: unknown;
+  entity: Readonly<Record<string, unknown>>;
+  requestId?: string;
+  tenantId?: string;
+}
+
+export type FieldVisibilityResolver = (
+  ctx: FieldVisibilityContext,
+) => boolean | Promise<boolean>;
+
 export interface ColumnMetadata {
   name: string;
   columnName: string;
@@ -31,6 +48,19 @@ export interface ColumnMetadata {
   unique: boolean;
   default?: unknown | (() => unknown);
   validators: FieldValidatorMetadata[];
+  /**
+   * When true, the field is always stripped from query results — it still
+   * exists in the database and can still be written to. Takes precedence
+   * over `visibility` if both are set.
+   */
+  hidden?: boolean;
+  /**
+   * Per-request/per-actor visibility. Evaluated for every entity the field
+   * would otherwise appear on; return `false` to strip it from that
+   * specific result. This is about what a caller is allowed to *see*, not
+   * what they're allowed to *write* — write access is a separate concern.
+   */
+  visibility?: FieldVisibilityResolver;
 }
 
 interface BaseRelationMetadata {
@@ -81,10 +111,35 @@ export interface TableValidatorMetadata {
   ) => ValidationResult | Promise<ValidationResult>;
 }
 
+/**
+ * A standalone index, as opposed to `ColumnMetadata.unique`, which covers
+ * single-column uniqueness only. Use this for composite indexes (multiple
+ * fields) or named single-field indexes that aren't backed by a unique
+ * constraint.
+ */
+export interface IndexMetadata {
+  /** Must be unique across the database — becomes the SQL index name. */
+  name: string;
+  /** Field names (not column names), in index order. */
+  fields: string[];
+  unique: boolean;
+}
+
+export interface AuditMetadata {
+  /** Enables audit entries for mutations on this table. */
+  enabled: boolean;
+  /** Fields removed from both snapshots and computed changes. */
+  excludedFields?: string[];
+}
+
 export interface TableMetadata {
   name: string;
   collectionName: string;
   columns: ColumnMetadata[];
   relations: RelationMetadata[];
   tableValidators: TableValidatorMetadata[];
+  /** Optional for backward compatibility with existing table definitions. */
+  indexes?: IndexMetadata[];
+  /** Optional per-table audit configuration. Auditing is disabled by default. */
+  audit?: AuditMetadata;
 }

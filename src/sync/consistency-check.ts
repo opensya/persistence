@@ -1,5 +1,9 @@
 import type { MetadataRegistry } from "../metadata/registry.js";
-import type { TableMetadata, ColumnMetadata } from "../metadata/types.js";
+import type {
+  TableMetadata,
+  ColumnMetadata,
+  IndexMetadata,
+} from "../metadata/types.js";
 import type { DatabaseAdapter } from "../adapter/types.js";
 import type { SchemaDrift } from "./types.js";
 
@@ -23,13 +27,14 @@ export class ConsistencyChecker {
 
       if (!actual) {
         issues.push(
-          `Table "${declared.collectionName}" déclarée mais absente en base — migration manquante ?`,
+          `Table "${declared.collectionName}" is declared but missing in the database — pending migration?`,
         );
         drifts.push({ table: declared.name, issues });
         continue;
       }
 
       this.compareColumns(declared, actual, issues);
+      this.compareIndexes(declared, actual, issues);
 
       if (issues.length > 0) {
         drifts.push({ table: declared.name, issues });
@@ -51,7 +56,7 @@ export class ConsistencyChecker {
 
       if (!actualColumn) {
         issues.push(
-          `Colonne "${column.columnName}" déclarée mais absente en base.`,
+          `Column "${column.columnName}" is declared but missing in the database.`,
         );
         continue;
       }
@@ -62,7 +67,7 @@ export class ConsistencyChecker {
 
     for (const orphan of actualColumns.values()) {
       issues.push(
-        `Colonne "${orphan.columnName}" présente en base mais non déclarée dans le schema.`,
+        `Column "${orphan.columnName}" exists in the database but is not declared in the schema.`,
       );
     }
   }
@@ -74,17 +79,74 @@ export class ConsistencyChecker {
   ): void {
     if (declared.type !== actual.type) {
       issues.push(
-        `Colonne "${declared.columnName}" : type déclaré "${declared.type}" ≠ type réel "${actual.type}".`,
+        `Column "${declared.columnName}": declared type "${declared.type}" ≠ actual type "${actual.type}".`,
       );
     }
     if (declared.nullable !== actual.nullable) {
       issues.push(
-        `Colonne "${declared.columnName}" : nullable déclaré "${declared.nullable}" ≠ réel "${actual.nullable}".`,
+        `Column "${declared.columnName}": declared nullable "${declared.nullable}" ≠ actual "${actual.nullable}".`,
       );
     }
     if (declared.primaryKey !== actual.primaryKey) {
       issues.push(
-        `Colonne "${declared.columnName}" : primaryKey déclaré "${declared.primaryKey}" ≠ réel "${actual.primaryKey}".`,
+        `Column "${declared.columnName}": declared primaryKey "${declared.primaryKey}" ≠ actual "${actual.primaryKey}".`,
+      );
+    }
+    if (declared.unique !== actual.unique) {
+      issues.push(
+        `Column "${declared.columnName}": declared unique "${declared.unique}" ≠ actual "${actual.unique}".`,
+      );
+    }
+  }
+
+  private compareIndexes(
+    declared: TableMetadata,
+    actual: TableMetadata,
+    issues: string[],
+  ): void {
+    const actualByName = new Map(
+      (actual.indexes ?? []).map((index) => [index.name, index]),
+    );
+
+    for (const index of declared.indexes ?? []) {
+      const actualIndex = actualByName.get(index.name);
+
+      if (!actualIndex) {
+        issues.push(
+          `Index "${index.name}" is declared but missing in the database.`,
+        );
+        continue;
+      }
+
+      this.compareIndex(index, actualIndex, issues);
+      actualByName.delete(index.name);
+    }
+
+    for (const orphan of actualByName.values()) {
+      issues.push(
+        `Index "${orphan.name}" exists in the database but is not declared in the schema.`,
+      );
+    }
+  }
+
+  private compareIndex(
+    declared: IndexMetadata,
+    actual: IndexMetadata,
+    issues: string[],
+  ): void {
+    if (declared.unique !== actual.unique) {
+      issues.push(
+        `Index "${declared.name}": declared unique "${declared.unique}" ≠ actual "${actual.unique}".`,
+      );
+    }
+
+    const sameFields =
+      declared.fields.length === actual.fields.length &&
+      declared.fields.every((field, i) => field === actual.fields[i]);
+
+    if (!sameFields) {
+      issues.push(
+        `Index "${declared.name}": declared fields [${declared.fields.join(", ")}] ≠ actual fields [${actual.fields.join(", ")}].`,
       );
     }
   }

@@ -1,0 +1,59 @@
+{
+  "name": "@opensya/docs",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opensya/docs.git"
+  },
+  "dependencies": {
+    "@docsearch/css": "^4.6.3",
+    "@docsearch/js": "^4.6.3",
+    "@iconify-json/lucide": "^1.2.106",
+    "@iconify-json/simple-icons": "^1.2.81",
+    "@iconify-json/tabler": "^1.2.35",
+    "@iconify-json/vscode-icons": "^1.2.49",
+    "@nuxt/content": "^3.13.0",
+    "@nuxt/image": "^2.0.0",
+    "@nuxt/ui": "^4.7.1",
+    "@nuxtjs/algolia": "^1.11.2",
+    "@nuxtjs/mcp-toolkit": "^0.16.1",
+    "@nuxtjs/mdc": "^0.21.1",
+    "@nuxtjs/sitemap": "^8.0.15",
+    "@takumi-rs/core": "^1.1.2",
+    "@vueuse/core": "^14.3.0",
+    "algoliasearch": "^5.52.1",
+    "fast-glob": "^3.3.3",
+    "gray-matter": "^4.0.3",
+    "lodash": "^4.18.1",
+    "minimark": "^0.2.0",
+    "motion-v": "^2.2.1",
+    "nuxt": "^4.4.5",
+    "nuxt-llms": "0.2.0",
+    "nuxt-og-image": "^6.5.0",
+    "remove-markdown": "^0.6.4",
+    "tailwindcss": "^4.3.0",
+    "ufo": "^1.6.4",
+    "unist-util-visit": "^5.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.15.2",
+    "@types/lodash": "^4.17.24",
+    "dotenv": "^17.4.2",
+    "eslint": "^10.3.0",
+    "sass": "^1.99.0",
+    "tsx": "^4.22.1",
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.2.8"
+  },
+  "packageManager": "pnpm@10.33.4"
+}
