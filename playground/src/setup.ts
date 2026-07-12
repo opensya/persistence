@@ -74,10 +74,12 @@ export async function createPlayground() {
 
 async function resetDatabase(pool: Pool): Promise<void> {
   await pool.query(`
+    DROP TABLE IF EXISTS playground_migration_records CASCADE;
     DROP TABLE IF EXISTS playground_posts CASCADE;
     DROP TABLE IF EXISTS playground_users CASCADE;
     DROP TABLE IF EXISTS playground_audit_logs CASCADE;
     DROP TABLE IF EXISTS playground_outbox_events CASCADE;
     DROP TABLE IF EXISTS playground_agendas CASCADE;
+    DROP TABLE IF EXISTS _opensya_migrations CASCADE;
   `);
 }

@@ -9,7 +9,8 @@
     "test:crud": "tsx --env-file=.env src/scenarios/01-crud-and-validation.ts",
     "test:relations": "tsx --env-file=.env src/scenarios/02-relations-and-serialization.ts",
     "test:audit-events": "tsx --env-file=.env src/scenarios/03-audit-and-domain-events.ts",
-    "test:pagination": "tsx --env-file=.env src/scenarios/04-cursor-pagination.ts"
+    "test:pagination": "tsx --env-file=.env src/scenarios/04-cursor-pagination.ts",
+    "test:migrations": "tsx --env-file=.env src/scenarios/05-migrations.ts"
   },
   "dependencies": {
     "@opensya/persistence": "workspace:*",
