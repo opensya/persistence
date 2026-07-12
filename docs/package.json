@@ -1,5 +1,5 @@
 {
-  "name": "@opensya/docs",
+  "name": "@opensya/persistence-docs",
   "private": false,
   "type": "module",
   "scripts": {

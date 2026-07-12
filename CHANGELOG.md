@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 No version has been tagged/published yet — `package.json` currently sits at
-`0.2.1` as a pre-release working version.
+`0.3.0` as a pre-release working version.
 
 ### Added
 
