@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Metadata-driven schema creation.** A locked registry can now create its
+  physical database resources through `engine.schema.createTables()`. Schema
+  creation is adapter-driven, idempotent and non-destructive by default. The
+  Drizzle PostgreSQL adapter creates missing tables, columns, primary keys,
+  unique constraints, declared indexes and supported foreign keys inside a
+  transaction. Existing tables are preserved and reported as skipped, while
+  adapters without schema support fail with an explicit capability error.
+
 ## [0.3.2] - 2026-07-12
 
 ### Added

@@ -37,6 +37,7 @@ import {
 import type {
   ColumnMetadata,
   IndexMetadata,
+  RelationMetadata,
   TableMetadata,
 } from "../metadata/types.js";
 import {
@@ -45,6 +46,8 @@ import {
   type FilterCondition,
   type QueryFilter,
   type QueryParams,
+  type SchemaCreationOptions,
+  type SchemaCreationResult,
 } from "./types.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -181,6 +184,19 @@ export class DrizzleAdapter implements DatabaseAdapter {
     );
   }
 
+  async createTables(
+    tables: readonly TableMetadata[],
+    options: SchemaCreationOptions = {},
+  ): Promise<SchemaCreationResult> {
+    const database = this.db as TransactionCapableDatabase;
+    return database.transaction((tx) =>
+      new DrizzleAdapter(tx, this.tables).createTablesInTransaction(
+        tables,
+        options,
+      ),
+    );
+  }
+
   /**
    * Real introspection via information_schema and the pg_catalog index
    * tables — independent from any Drizzle schema already built (works even
@@ -289,6 +305,232 @@ export class DrizzleAdapter implements DatabaseAdapter {
     }
 
     return tables;
+  }
+
+  private async createTablesInTransaction(
+    tables: readonly TableMetadata[],
+    options: SchemaCreationOptions,
+  ): Promise<SchemaCreationResult> {
+    const existing = new Set(
+      (await this.introspect()).map((table) => table.collectionName),
+    );
+    const result: SchemaCreationResult = { created: [], skipped: [] };
+
+    for (const table of tables) {
+      await this.db.execute(sql.raw(this.createTableStatement(table)));
+      (existing.has(table.collectionName) ? result.skipped : result.created).push(
+        table.name,
+      );
+    }
+
+    for (const table of tables) {
+      for (const declared of table.indexes ?? []) {
+        await this.db.execute(sql.raw(this.createIndexStatement(table, declared)));
+      }
+    }
+
+    if (options.foreignKeys !== false) {
+      const byName = new Map(tables.map((table) => [table.name, table]));
+      for (const table of tables) {
+        for (const relation of table.relations) {
+          await this.createForeignKey(table, relation, byName);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private createTableStatement(table: TableMetadata): string {
+    const columns = table.columns.map((column) =>
+      this.createColumnDefinition(column),
+    );
+    const primaryKeys = table.columns.filter((column) => column.primaryKey);
+
+    if (primaryKeys.length) {
+      columns.push(
+        `PRIMARY KEY (${primaryKeys
+          .map((column) => this.quoteIdentifier(column.columnName))
+          .join(", ")})`,
+      );
+    }
+
+    return `CREATE TABLE IF NOT EXISTS ${this.quoteIdentifier(table.collectionName)} (${columns.join(", ")})`;
+  }
+
+  private createColumnDefinition(column: ColumnMetadata): string {
+    const parts = [
+      this.quoteIdentifier(column.columnName),
+      this.columnTypeToSql(column),
+    ];
+
+    if (!column.nullable) parts.push("NOT NULL");
+    if (column.unique && !column.primaryKey) parts.push("UNIQUE");
+    if (column.default !== undefined && typeof column.default !== "function") {
+      parts.push(`DEFAULT ${this.defaultValueToSql(column, column.default)}`);
+    }
+
+    return parts.join(" ");
+  }
+
+  private createIndexStatement(
+    table: TableMetadata,
+    declared: IndexMetadata,
+  ): string {
+    const fields = declared.fields.map((field) => {
+      const column = table.columns.find((candidate) => candidate.name === field);
+      if (!column) {
+        throw new Error(
+          `Index "${declared.name}" references unknown field "${field}" on table "${table.name}".`,
+        );
+      }
+      return this.quoteIdentifier(column.columnName);
+    });
+    const unique = declared.unique ? "UNIQUE " : "";
+    return `CREATE ${unique}INDEX IF NOT EXISTS ${this.quoteIdentifier(declared.name)} ON ${this.quoteIdentifier(table.collectionName)} (${fields.join(", ")})`;
+  }
+
+  private async createForeignKey(
+    source: TableMetadata,
+    relation: RelationMetadata,
+    tables: ReadonlyMap<string, TableMetadata>,
+  ): Promise<void> {
+    if (relation.kind !== "manyToOne" && relation.kind !== "oneToOne") return;
+
+    const target = tables.get(relation.target);
+    if (!target) {
+      throw new Error(
+        `Relation "${relation.name}" targets table "${relation.target}", which was not provided for schema creation.`,
+      );
+    }
+
+    const sourceColumn = this.getMetadataColumn(source, relation.foreignKey);
+    const targetColumn = this.getMetadataColumn(
+      target,
+      relation.references ?? "id",
+    );
+    const existing = (await this.db.execute(sql`
+      SELECT 1
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.constraint_schema = kcu.constraint_schema
+      JOIN information_schema.constraint_column_usage ccu
+        ON tc.constraint_name = ccu.constraint_name
+        AND tc.constraint_schema = ccu.constraint_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+        AND tc.table_name = ${source.collectionName}
+        AND kcu.column_name = ${sourceColumn.columnName}
+        AND ccu.table_schema = 'public'
+        AND ccu.table_name = ${target.collectionName}
+        AND ccu.column_name = ${targetColumn.columnName}
+      LIMIT 1
+    `)) as { rows: unknown[] };
+
+    if (existing.rows.length) return;
+
+    const constraintName = this.foreignKeyName(source, relation);
+    await this.db.execute(sql.raw(
+      `ALTER TABLE ${this.quoteIdentifier(source.collectionName)} ` +
+        `ADD CONSTRAINT ${this.quoteIdentifier(constraintName)} ` +
+        `FOREIGN KEY (${this.quoteIdentifier(sourceColumn.columnName)}) ` +
+        `REFERENCES ${this.quoteIdentifier(target.collectionName)} (${this.quoteIdentifier(targetColumn.columnName)})`,
+    ));
+  }
+
+  private getMetadataColumn(
+    table: TableMetadata,
+    field: string,
+  ): ColumnMetadata {
+    const column = table.columns.find((candidate) => candidate.name === field);
+    if (!column) {
+      throw new Error(`Unknown field "${field}" on table "${table.name}".`);
+    }
+    return column;
+  }
+
+  private foreignKeyName(
+    table: TableMetadata,
+    relation: RelationMetadata,
+  ): string {
+    const name = `persistence_${table.collectionName}_${relation.name}_fk`;
+    if (name.length <= 63) return name;
+
+    let hash = 2166136261;
+    for (const character of name) {
+      hash ^= character.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+    const suffix = (hash >>> 0).toString(16).padStart(8, "0");
+    return `${name.slice(0, 54)}_${suffix}`;
+  }
+
+  private columnTypeToSql(column: ColumnMetadata): string {
+    switch (column.type) {
+      case "uuid":
+        return "UUID";
+      case "string":
+      case "text":
+        return "TEXT";
+      case "integer":
+        return "INTEGER";
+      case "bigint":
+        return "BIGINT";
+      case "boolean":
+        return "BOOLEAN";
+      case "timestamp":
+        return "TIMESTAMP";
+      case "date":
+        return "DATE";
+      case "json":
+        return "JSONB";
+      case "decimal":
+        return "NUMERIC";
+    }
+  }
+
+  private defaultValueToSql(
+    column: ColumnMetadata,
+    value: unknown,
+  ): string {
+    if (value === null) return "NULL";
+    if (column.type === "json") {
+      const jsonValue = JSON.stringify(value);
+      if (jsonValue === undefined) {
+        throw new Error(
+          `Unsupported static database default for "${column.name}".`,
+        );
+      }
+      return `${this.quoteLiteral(jsonValue)}::jsonb`;
+    }
+    if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+    if (typeof value === "bigint") return value.toString();
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) {
+        throw new Error("Database defaults must be finite numbers.");
+      }
+      return value.toString();
+    }
+    if (value instanceof Date) {
+      const serialized =
+        column.type === "date"
+          ? value.toISOString().slice(0, 10)
+          : value.toISOString();
+      return this.quoteLiteral(serialized);
+    }
+    if (typeof value === "string") return this.quoteLiteral(value);
+    throw new Error(
+      `Unsupported static database default for "${column.name}".`,
+    );
+  }
+
+  private quoteIdentifier(value: string): string {
+    return `"${value.replaceAll('"', '""')}"`;
+  }
+
+  private quoteLiteral(value: string): string {
+    return `'${value.replaceAll("'", "''")}'`;
   }
 
   private mapSqlTypeToColumnType(sqlType: string): ColumnMetadata["type"] {
