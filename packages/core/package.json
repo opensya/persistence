@@ -1,6 +1,6 @@
 {
   "name": "@opensya/persistence",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "A metadata-driven persistence engine for TypeScript applications.",
   "type": "module",
   "main": "./dist/index.js",
