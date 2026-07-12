@@ -1,5 +1,10 @@
 <script setup lang="ts">
+import type { ContentNavigationItem } from '@nuxt/content';
+import { findPageHeadline } from '@nuxt/content/utils';
 import 'instantsearch.css/themes/satellite-min.css';
+
+const navigation = inject<Ref<ContentNavigationItem[]>>('navigation');
+const siteConfig = useSiteConfig();
 
 const { data: page } = await useAsyncData('index', () =>
   queryCollection('landing').path('/').first(),
@@ -16,16 +21,24 @@ if (!page.value) {
 const title = page.value.seo?.title || page.value.title;
 const description = page.value.seo?.description || page.value.description;
 
+const headline = computed(() =>
+  findPageHeadline(navigation?.value, page.value?.path, { indexAsChild: true }),
+);
+
 useSeoMeta({
   titleTemplate: '',
   title,
   ogTitle: title,
   description,
   ogDescription: description,
-  // ogImage: 'https://ui.nuxt.com/assets/templates/nuxt/docs-light.png',
 });
 
-// defineOgImage('Docs.takumi', { title, description, headline: headline.value });
+defineOgImage('Docs.takumi', {
+  title,
+  description,
+  headline: headline.value,
+  siteUrl: siteConfig.url,
+});
 </script>
 
 <template>

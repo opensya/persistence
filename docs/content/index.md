@@ -1,16 +1,20 @@
 ---
 title: OpenSya Persistence
-description: A metadata-driven persistence engine for TypeScript applications, powering OpenSya.
+description: A type-safe, metadata-driven persistence runtime for TypeScript applications.
 navigation: false
 ---
 
 # OpenSya Persistence
 
-The persistence engine behind OpenSya, available to any TypeScript application.
+Build your persistence layer around your domain, not your database.
 
-Declare the domain once. Persistence executes validation, relations, lifecycle
-hooks, transactions, audit trails and domain events consistently, while the
-database remains behind an adapter.
+OpenSya Persistence turns table metadata into a strongly typed Query Engine and
+a consistent runtime for validation, relations, lifecycle hooks, transactions,
+audit logs and domain events.
+
+Framework-agnostic and adapter-based, it gives TypeScript applications a stable
+persistence API while keeping the underlying database replaceable. It powers
+OpenSya, but is designed for any TypeScript project.
 
 ::u-page-grid
 ---
