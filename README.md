@@ -1,7 +1,6 @@
-
 <br />
 <p align="center">
-  <a href="https://persistence.opensya.com/" target="_blank"><img ssrc="./docs/public/favicon.svg" width="120" alt="OpenSya Persistence Logo" /></a>
+  <a href="https://persistence.opensya.com/" target="_blank"><img src=".github/assets/logo.svg" width="120" alt="OpenSya Persistence Logo" /></a>
 </p>
 
 <h1 align="center">

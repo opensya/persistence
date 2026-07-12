@@ -1,0 +1,104 @@
+{
+  "name": "@opensya/persistence",
+  "version": "0.3.0",
+  "description": "A metadata-driven persistence engine for TypeScript applications.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./metadata": {
+      "types": "./dist/metadata/index.d.ts",
+      "import": "./dist/metadata/index.js",
+      "require": "./dist/metadata/index.cjs"
+    },
+    "./adapter": {
+      "types": "./dist/adapter/index.d.ts",
+      "import": "./dist/adapter/index.js",
+      "require": "./dist/adapter/index.cjs"
+    },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.js",
+      "require": "./dist/hooks/index.cjs"
+    },
+    "./relations": {
+      "types": "./dist/relations/index.d.ts",
+      "import": "./dist/relations/index.js",
+      "require": "./dist/relations/index.cjs"
+    },
+    "./sync": {
+      "types": "./dist/sync/index.d.ts",
+      "import": "./dist/sync/index.js",
+      "require": "./dist/sync/index.cjs"
+    },
+    "./query-engine": {
+      "types": "./dist/query-engine/index.d.ts",
+      "import": "./dist/query-engine/index.js",
+      "require": "./dist/query-engine/index.cjs"
+    },
+    "./audit": {
+      "types": "./dist/audit/index.d.ts",
+      "import": "./dist/audit/index.js",
+      "require": "./dist/audit/index.cjs"
+    },
+    "./events": {
+      "types": "./dist/events/index.d.ts",
+      "import": "./dist/events/index.js",
+      "require": "./dist/events/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "1.0.0-beta.22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsdown": "^0.22.4",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "domutala"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opensya/persistence.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://persistence.opensya.com",
+  "bugs": {
+    "url": "https://github.com/opensya/persistence/issues"
+  },
+  "keywords": [
+    "persistence",
+    "database",
+    "orm",
+    "drizzle",
+    "typescript",
+    "metadata",
+    "query-engine",
+    "adapter",
+    "postgresql",
+    "opensya"
+  ]
+}
