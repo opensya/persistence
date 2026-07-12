@@ -1,8 +1,8 @@
 ---
-title: Drizzle adapter
+title: PostgreSQL adapter
 description: PostgreSQL query execution, schema creation, transactions, and introspection.
 navigation:
-  icon: i-simple-icons-drizzle
+  icon: i-simple-icons-postgresql
 ---
 
 `PostgreAdapter` implements `DatabaseAdapter` for Drizzle's asynchronous PostgreSQL database.
