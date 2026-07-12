@@ -1,6 +1,6 @@
 ---
 title: Drizzle adapter
-description: PostgreSQL query execution, runtime table construction, transactions, and schema introspection.
+description: PostgreSQL query execution, schema creation, transactions, and introspection.
 navigation:
   icon: i-simple-icons-drizzle
 ---
@@ -16,6 +16,22 @@ const adapter = createDrizzleAdapter(db)
 ```
 
 The database must support Drizzle's select, insert, update, delete, execute, and transaction APIs.
+
+## Schema creation
+
+```ts
+const engine = createQueryEngine(registry, adapter)
+const result = await engine.schema.createTables()
+```
+
+The adapter creates missing tables, static database defaults, primary keys,
+single-column unique constraints, declared indexes and owning-side foreign keys
+inside a PostgreSQL transaction. Function defaults remain runtime defaults and
+are not converted into frozen database values.
+
+Tables are created with `IF NOT EXISTS`, indexes with `IF NOT EXISTS`, and
+existing foreign keys are detected before creation. Running the operation more
+than once is safe and existing data is not modified.
 
 ## Runtime tables
 
@@ -33,7 +49,10 @@ icon: i-tabler-alert-triangle
 color: warning
 variant: subtle
 ---
-Query operations fail when the logical table has not been built. Runtime table construction does not execute DDL or migrations.
+Query operations fail when the logical table has not been built. Calling
+`engine.schema.createTables()` builds every registered runtime table
+automatically. Applications that manage DDL separately can continue calling
+`buildTable()` directly.
 ::
 
 ## Column mapping
