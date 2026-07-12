@@ -59,7 +59,7 @@ type TransactionCapableDatabase = AnyPgDatabase & {
   transaction<T>(callback: (tx: AnyPgDatabase) => Promise<T>): Promise<T>;
 };
 
-export class DrizzleAdapter implements DatabaseAdapter {
+export class PostgreAdapter implements DatabaseAdapter {
   constructor(
     private readonly db: AnyPgDatabase,
     private readonly tables = new Map<string, BuiltTable>(),
@@ -180,7 +180,7 @@ export class DrizzleAdapter implements DatabaseAdapter {
   ): Promise<T> {
     const database = this.db as TransactionCapableDatabase;
     return database.transaction(async (tx) =>
-      callback(new DrizzleAdapter(tx, this.tables)),
+      callback(new PostgreAdapter(tx, this.tables)),
     );
   }
 
@@ -190,7 +190,7 @@ export class DrizzleAdapter implements DatabaseAdapter {
   ): Promise<SchemaCreationResult> {
     const database = this.db as TransactionCapableDatabase;
     return database.transaction((tx) =>
-      new DrizzleAdapter(tx, this.tables).createTablesInTransaction(
+      new PostgreAdapter(tx, this.tables).createTablesInTransaction(
         tables,
         options,
       ),
@@ -735,6 +735,6 @@ export class DrizzleAdapter implements DatabaseAdapter {
   }
 }
 
-export function createDrizzleAdapter(db: AnyPgDatabase): DrizzleAdapter {
-  return new DrizzleAdapter(db);
+export function createPostgreAdapter(db: AnyPgDatabase): PostgreAdapter {
+  return new PostgreAdapter(db);
 }

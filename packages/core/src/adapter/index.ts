@@ -1,2 +1,2 @@
 export * from "./types.js";
-export * from "./drizzle-adapter.js";
+export * from "./postgre-adapter.js";

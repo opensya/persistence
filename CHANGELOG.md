@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   transaction. Existing tables are preserved and reported as skipped, while
   adapters without schema support fail with an explicit capability error.
 
+### Changed
+
+- Renamed `DrizzleAdapter` to `PostgreAdapter` and `createDrizzleAdapter()` to
+  `createPostgreAdapter()` to identify the supported database rather than the
+  internal query builder used by the implementation.
+
 ## [0.3.2] - 2026-07-12
 
 ### Added
@@ -94,11 +100,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `DrizzleAdapter.introspect()` now derives `ColumnMetadata.unique` from real
+- `PostgreAdapter.introspect()` now derives `ColumnMetadata.unique` from real
   database state instead of always returning `false`. It also introspects
   standalone indexes via `pg_index`/`pg_class`, distinguishing them from the
   single-column unique indexes that back `column.unique`.
-- `DrizzleAdapter.buildTable()` now creates the indexes declared in
+- `PostgreAdapter.buildTable()` now creates the indexes declared in
   `TableMetadata.indexes` on the underlying Drizzle table.
 - `MetadataRegistry.validate()` now validates declared indexes (duplicate
   names, empty field lists, references to unknown fields).

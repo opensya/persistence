@@ -5,14 +5,14 @@ navigation:
   icon: i-simple-icons-drizzle
 ---
 
-`DrizzleAdapter` implements `DatabaseAdapter` for Drizzle's asynchronous PostgreSQL database.
+`PostgreAdapter` implements `DatabaseAdapter` for Drizzle's asynchronous PostgreSQL database.
 
 ## Create an adapter
 
 ```ts
-import { createDrizzleAdapter } from '@opensya/persistence'
+import { createPostgreAdapter } from '@opensya/persistence'
 
-const adapter = createDrizzleAdapter(db)
+const adapter = createPostgreAdapter(db)
 ```
 
 The database must support Drizzle's select, insert, update, delete, execute, and transaction APIs.

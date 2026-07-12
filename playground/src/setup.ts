@@ -4,7 +4,7 @@ import {
   createAuditManager,
   createDatabaseAuditWriter,
   createDatabaseOutboxWriter,
-  createDrizzleAdapter,
+  createPostgreAdapter,
   createHooksRegistry,
   createMetadataRegistry,
   createQueryEngine,
@@ -30,7 +30,7 @@ export async function createPlayground() {
 
   await resetDatabase(pool);
 
-  const adapter = createDrizzleAdapter(database);
+  const adapter = createPostgreAdapter(database);
   const registry = createMetadataRegistry(
     usersMetadata,
     postsMetadata,
