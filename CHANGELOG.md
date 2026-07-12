@@ -7,8 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-No version has been tagged/published yet — `package.json` currently sits at
-`0.3.0` as a pre-release working version.
+## [0.3.2] - 2026-07-12
 
 ### Added
 
@@ -103,3 +102,6 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 - `OPENSYA_DATABASE_VERSION` previously reported `0.0.1` regardless of the
   actual package version.
+
+[Unreleased]: https://github.com/opensya/persistence/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/opensya/persistence/releases/tag/v0.3.2
