@@ -1,21 +1,59 @@
 ---
-title: Drizzle adapter
-description: PostgreSQL query execution, runtime table construction, transactions, and schema introspection.
+title: PostgreSQL adapter
+description: PostgreSQL query execution, schema creation, transactions, and introspection.
 navigation:
-  icon: i-simple-icons-drizzle
+  icon: i-simple-icons-postgresql
 ---
 
-`DrizzleAdapter` implements `DatabaseAdapter` for Drizzle's asynchronous PostgreSQL database.
+`PostgreAdapter` implements `DatabaseAdapter` for Drizzle's asynchronous PostgreSQL database.
 
 ## Create an adapter
 
 ```ts
-import { createDrizzleAdapter } from '@opensya/persistence'
+import { createPostgreAdapter } from '@opensya/persistence'
 
-const adapter = createDrizzleAdapter(db)
+const adapter = createPostgreAdapter(db)
 ```
 
 The database must support Drizzle's select, insert, update, delete, execute, and transaction APIs.
+
+## Schema creation
+
+```ts
+const engine = createQueryEngine({ registry, adapter })
+const result = await engine.schema.createTables()
+```
+
+The adapter creates missing tables, static database defaults, primary keys,
+single-column unique constraints, declared indexes and owning-side foreign keys
+inside a PostgreSQL transaction. Function defaults remain runtime defaults and
+are not converted into frozen database values.
+
+Tables are created with `IF NOT EXISTS`, indexes with `IF NOT EXISTS`, and
+existing foreign keys are detected before creation. Running the operation more
+than once is safe and existing data is not modified.
+
+## Migrations
+
+`PostgreAdapter` renders logical migration operations as PostgreSQL DDL and
+executes pending migrations inside a transaction.
+
+```ts
+const plan = await engine.migrations.plan(migrations)
+const result = await engine.migrations.apply(migrations)
+```
+
+Applied migrations are stored in `_opensya_migrations`. A PostgreSQL advisory
+lock prevents concurrent deployment processes from applying the same migration.
+Checksums protect applied artifacts from later modification.
+
+Destructive and irreversible plans require explicit approval:
+
+```ts
+await engine.migrations.apply(migrations, {
+  allowDestructive: true
+})
+```
 
 ## Runtime tables
 
@@ -33,7 +71,10 @@ icon: i-tabler-alert-triangle
 color: warning
 variant: subtle
 ---
-Query operations fail when the logical table has not been built. Runtime table construction does not execute DDL or migrations.
+Query operations fail when the logical table has not been built. Calling
+`engine.schema.createTables()` builds every registered runtime table
+automatically. Applications that manage DDL separately can continue calling
+`buildTable()` directly.
 ::
 
 ## Column mapping

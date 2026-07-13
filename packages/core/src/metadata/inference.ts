@@ -22,7 +22,9 @@ type ColumnBaseValue<TColumn extends ColumnMetadata> =
             : TColumn["type"] extends "decimal"
               ? string | number
               : TColumn["type"] extends "json"
-                ? unknown
+                ? TColumn extends { $type: infer TJson }
+                  ? TJson
+                  : unknown
                 : never;
 
 export type InferColumnValue<TColumn extends ColumnMetadata> =
@@ -80,6 +82,11 @@ export type ResolveEntityType<
 > = [TExplicit] extends [never]
   ? InferRegisteredEntity<TTables, TName>
   : TExplicit;
+
+/** Declares a compile-time-only type without creating a runtime value. */
+export function like<T>(): T {
+  return undefined as T;
+}
 
 /** Preserves table and column literals while validating TableMetadata. */
 export function defineTable<const TTable extends TableMetadata>(

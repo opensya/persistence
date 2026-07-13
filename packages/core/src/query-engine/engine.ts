@@ -1,4 +1,6 @@
 import type {
+  AggregateQuery,
+  AggregateRow,
   DatabaseAdapter,
   QueryFilter,
   QueryParams,
@@ -16,10 +18,16 @@ import type {
   TableMetadataMap,
 } from "../metadata/inference.js";
 import type { ColumnMetadata, TableMetadata } from "../metadata/types.js";
+import { MigrationManager } from "../migrations/manager.js";
 import { RelationResolver } from "../relations/resolver.js";
+import { SchemaManager } from "../sync/schema-manager.js";
 import { FieldSerializer } from "./serializer.js";
 import { CursorCodec } from "./cursor.js";
 import {
+  AggregateQueriesNotSupportedError,
+  InvalidAggregateQueryError,
+  OptimisticLockError,
+  OptimisticLockVersionRequiredError,
   UnsafeMutationError,
   ValidationError,
   type FieldValidationFailure,
@@ -51,6 +59,9 @@ export class QueryEngine<
   TEvents extends object = Record<string, unknown>,
   TTables extends TableMetadataMap = Record<never, never>,
 > {
+  readonly schema: SchemaManager;
+  readonly migrations: MigrationManager;
+
   constructor(
     private readonly registry: MetadataRegistry<TTables>,
     private readonly adapter: DatabaseAdapter,
@@ -59,7 +70,10 @@ export class QueryEngine<
     private readonly audit?: AuditManager,
     private readonly outbox?: OutboxWriter,
     private readonly cursor = new CursorCodec(),
-  ) {}
+  ) {
+    this.schema = new SchemaManager(registry, adapter);
+    this.migrations = new MigrationManager(registry, adapter);
+  }
 
   transaction<TResult>(
     context: QueryContextInput,
@@ -214,6 +228,23 @@ export class QueryEngine<
     ) as Promise<ResolveEntityType<T, TTables, TName>>;
   }
 
+  async aggregate<
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+    const TQuery extends AggregateQuery = AggregateQuery,
+  >(
+    tableName: TName,
+    query: TQuery,
+  ): Promise<AggregateRow<TQuery>[]> {
+    const table = this.registry.getOrThrow(tableName);
+    if (!this.adapter.aggregate) {
+      throw new AggregateQueriesNotSupportedError();
+    }
+    this.assertValidAggregateQuery(table, query);
+    return this.adapter.aggregate(tableName, query) as Promise<
+      AggregateRow<TQuery>[]
+    >;
+  }
+
   create<
     T = never,
     TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
@@ -227,18 +258,26 @@ export class QueryEngine<
     return this.adapter.transaction(async (tx) => {
       const hookContext = this.createHookContext(table, "create", tx, context);
       const withDefaults = await this.applyDefaults(table, data);
-      const resolved = await this.hooks.runBeforeCreate(
+      const initialized = this.initializeOptimisticLock(table, withDefaults);
+      const hooked = await this.hooks.runBeforeCreate(
         tableName,
-        withDefaults,
+        initialized,
         hookContext,
       );
+      const resolved = this.initializeOptimisticLock(table, hooked);
 
       this.assertKnownFields(table, resolved);
       await this.assertValid(table, resolved);
+      const transformed = await this.transformFields(
+        table,
+        resolved,
+        "create",
+        context,
+      );
 
       const entity = await tx.insert<Record<string, unknown>>(
         tableName,
-        resolved,
+        transformed,
       );
       await this.hooks.runAfterCreate(tableName, entity, hookContext);
       await this.audit?.record({
@@ -283,16 +322,41 @@ export class QueryEngine<
       );
       this.assertKnownFields(table, resolvedPatch);
 
+      const optimisticUpdate = this.prepareOptimisticUpdate(
+        table,
+        current,
+        resolvedPatch,
+      );
+
       const merged = { ...current, ...resolvedPatch };
       await this.assertValid(table, merged, Object.keys(resolvedPatch));
+      const transformedPatch = await this.transformFields(
+        table,
+        optimisticUpdate.patch,
+        "update",
+        context,
+      );
 
-      const primaryKeyFilter = this.createPrimaryKeyFilter(table, current);
+      const primaryKeyFilter = this.withOptimisticLockFilter(
+        table,
+        this.createPrimaryKeyFilter(table, current),
+        optimisticUpdate.expectedVersion,
+      );
       const [updated] = await tx.update<Record<string, unknown>>(
         tableName,
         primaryKeyFilter,
-        resolvedPatch,
+        transformedPatch,
       );
-      if (!updated) return null;
+      if (!updated) {
+        if (optimisticUpdate.expectedVersion !== undefined) {
+          throw new OptimisticLockError(
+            table.name,
+            table.optimisticLock!.field,
+            optimisticUpdate.expectedVersion,
+          );
+        }
+        return null;
+      }
 
       await this.hooks.runAfterUpdate(tableName, updated, hookContext);
       await this.audit?.record({
@@ -340,6 +404,10 @@ export class QueryEngine<
       );
       this.assertKnownFields(table, resolvedPatch);
 
+      const optimisticUpdates = currentRows.map((current) =>
+        this.prepareOptimisticUpdate(table, current, resolvedPatch),
+      );
+
       const touchedFields = Object.keys(resolvedPatch);
       for (const current of currentRows) {
         await this.assertValid(
@@ -348,12 +416,34 @@ export class QueryEngine<
           touchedFields,
         );
       }
+      const transformedPatch = await this.transformFields(
+        table,
+        optimisticUpdates[0]?.patch ?? resolvedPatch,
+        "update",
+        context,
+      );
 
+      const optimisticVersion = optimisticUpdates[0]?.expectedVersion;
+      const updateFilter = this.withOptimisticLockFilter(
+        table,
+        where,
+        optimisticVersion,
+      );
       const updatedRows = await tx.update<Record<string, unknown>>(
         tableName,
-        where,
-        resolvedPatch,
+        updateFilter,
+        transformedPatch,
       );
+      if (
+        optimisticVersion !== undefined &&
+        updatedRows.length !== currentRows.length
+      ) {
+        throw new OptimisticLockError(
+          table.name,
+          table.optimisticLock!.field,
+          optimisticVersion,
+        );
+      }
       for (const updated of updatedRows) {
         await this.hooks.runAfterUpdate(tableName, updated, hookContext);
       }
@@ -457,6 +547,154 @@ export class QueryEngine<
           ? await column.default()
           : column.default;
     }
+    return result;
+  }
+
+  private assertValidAggregateQuery(
+    table: TableMetadata,
+    query: AggregateQuery,
+  ): void {
+    const metrics = Object.entries(query.metrics);
+    if (!metrics.length) {
+      throw new InvalidAggregateQueryError("at least one metric is required.");
+    }
+
+    const columns = new Map(table.columns.map((column) => [column.name, column]));
+    const groupBy = query.groupBy ?? [];
+    if (new Set(groupBy).size !== groupBy.length) {
+      throw new InvalidAggregateQueryError("groupBy fields must be unique.");
+    }
+
+    for (const field of groupBy) {
+      const column = columns.get(field);
+      if (!column) {
+        throw new InvalidAggregateQueryError(`unknown groupBy field "${field}".`);
+      }
+      if (column.hidden || column.visibility) {
+        throw new InvalidAggregateQueryError(
+          `protected field "${field}" cannot be grouped.`,
+        );
+      }
+    }
+
+    for (const [alias, metric] of metrics) {
+      if (!alias.trim()) {
+        throw new InvalidAggregateQueryError("metric aliases cannot be empty.");
+      }
+      if (groupBy.includes(alias)) {
+        throw new InvalidAggregateQueryError(
+          `metric alias "${alias}" conflicts with a groupBy field.`,
+        );
+      }
+      if (!metric.field) {
+        if (metric.function !== "count") {
+          throw new InvalidAggregateQueryError(
+            `${metric.function} metric "${alias}" requires a field.`,
+          );
+        }
+        continue;
+      }
+
+      const column = columns.get(metric.field);
+      if (!column) {
+        throw new InvalidAggregateQueryError(
+          `metric "${alias}" references unknown field "${metric.field}".`,
+        );
+      }
+      if (column.hidden || column.visibility) {
+        throw new InvalidAggregateQueryError(
+          `metric "${alias}" references protected field "${metric.field}".`,
+        );
+      }
+      if (
+        (metric.function === "sum" || metric.function === "avg") &&
+        !["integer", "bigint", "decimal"].includes(column.type)
+      ) {
+        throw new InvalidAggregateQueryError(
+          `${metric.function} metric "${alias}" requires a numeric field.`,
+        );
+      }
+    }
+  }
+
+  private initializeOptimisticLock(
+    table: TableMetadata,
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const lock = table.optimisticLock;
+    if (!lock) return data;
+    return { ...data, [lock.field]: lock.initialVersion ?? 1 };
+  }
+
+  private prepareOptimisticUpdate(
+    table: TableMetadata,
+    current: Record<string, unknown>,
+    patch: Record<string, unknown>,
+  ): { patch: Record<string, unknown>; expectedVersion?: number } {
+    const lock = table.optimisticLock;
+    if (!lock) return { patch };
+
+    const expectedVersion = patch[lock.field];
+    if (!Number.isInteger(expectedVersion)) {
+      throw new OptimisticLockVersionRequiredError(table.name, lock.field);
+    }
+    if (current[lock.field] !== expectedVersion) {
+      throw new OptimisticLockError(
+        table.name,
+        lock.field,
+        expectedVersion as number,
+      );
+    }
+
+    return {
+      patch: { ...patch, [lock.field]: (expectedVersion as number) + 1 },
+      expectedVersion: expectedVersion as number,
+    };
+  }
+
+  private withOptimisticLockFilter(
+    table: TableMetadata,
+    where: QueryFilter,
+    expectedVersion: number | undefined,
+  ): QueryFilter {
+    const lock = table.optimisticLock;
+    if (!lock || expectedVersion === undefined) return where;
+    return {
+      and: [
+        where,
+        {
+          conditions: [
+            { field: lock.field, operator: "eq", value: expectedVersion },
+          ],
+        },
+      ],
+    };
+  }
+
+  private async transformFields(
+    table: TableMetadata,
+    data: Record<string, unknown>,
+    operation: "create" | "update",
+    context: QueryContextInput,
+  ): Promise<Record<string, unknown>> {
+    const result = { ...data };
+
+    for (const column of table.columns) {
+      if (!column.transform || !(column.name in data)) continue;
+
+      result[column.name] = await column.transform(data[column.name], {
+        operation,
+        field: column.name,
+        table: table.name,
+        entity: data,
+        user: context.user,
+        ...(context.requestId !== undefined && {
+          requestId: context.requestId,
+        }),
+        ...(context.tenantId !== undefined && { tenantId: context.tenantId }),
+      });
+    }
+
     return result;
   }
 
@@ -643,14 +881,21 @@ export class TransactionalQueryEngine<
 export function createQueryEngine<
   TEvents extends object = Record<string, unknown>,
   TTables extends TableMetadataMap = Record<never, never>,
->(
-  registry: MetadataRegistry<TTables>,
-  adapter: DatabaseAdapter,
-  hooks?: HooksRegistry,
-  serializer?: FieldSerializer,
-  audit?: AuditManager,
-  outbox?: OutboxWriter,
-): QueryEngine<TEvents, TTables> {
+>({
+  registry,
+  adapter,
+  hooks,
+  serializer,
+  audit,
+  outbox,
+}: {
+  registry: MetadataRegistry<TTables>;
+  adapter: DatabaseAdapter;
+  hooks?: HooksRegistry;
+  serializer?: FieldSerializer;
+  audit?: AuditManager;
+  outbox?: OutboxWriter;
+}): QueryEngine<TEvents, TTables> {
   return new QueryEngine<TEvents, TTables>(
     registry,
     adapter,

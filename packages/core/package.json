@@ -1,6 +1,6 @@
 {
   "name": "@opensya/persistence",
-  "version": "0.3.2",
+  "version": "0.5.0",
   "description": "A metadata-driven persistence engine for TypeScript applications.",
   "type": "module",
   "main": "./dist/index.js",
@@ -51,6 +51,11 @@
       "types": "./dist/events/index.d.ts",
       "import": "./dist/events/index.js",
       "require": "./dist/events/index.cjs"
+    },
+    "./migrations": {
+      "types": "./dist/migrations/index.d.ts",
+      "import": "./dist/migrations/index.js",
+      "require": "./dist/migrations/index.cjs"
     }
   },
   "files": [
@@ -59,6 +64,7 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
+    "test": "pnpm build && node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "prepack": "pnpm build"
   },

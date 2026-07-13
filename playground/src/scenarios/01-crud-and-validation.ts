@@ -18,6 +18,8 @@ export async function crudAndValidationScenario(): Promise<void> {
       assert.match(created.id, /^[0-9a-f-]{36}$/i);
       assert.equal(created.email, "john@example.com");
       assert.ok(created.createdAt instanceof Date);
+      assert.equal(created.preferences.theme, "system");
+      assert.equal(created.preferences.notifications, true);
       assert.equal("secret" in created, false);
 
       const found = await engine.findOne("users", {

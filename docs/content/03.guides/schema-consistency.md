@@ -5,8 +5,27 @@ navigation:
   icon: i-tabler-database-search
 ---
 
-The consistency checker is read-only. It compares the locked registry with
-`DatabaseAdapter.introspect()` and never changes the database.
+## Create missing tables
+
+```ts
+const result = await engine.schema.createTables()
+
+console.log(result.created)
+console.log(result.skipped)
+```
+
+Schema creation delegates physical operations to the active adapter. It
+creates missing resources and declared indexes, but never removes tables,
+columns or application data. The registry must be locked first. Adapters that
+do not implement schema creation throw `SchemaCreationNotSupportedError`.
+
+The PostgreSQL adapter creates all tables before adding foreign keys,
+so relational dependencies and cycles do not require manual ordering.
+
+## Detect drift
+
+The consistency checker remains read-only. It compares the locked registry
+with `DatabaseAdapter.introspect()` and never changes the database.
 
 ```ts
 const checker = createConsistencyChecker(registry, adapter)
@@ -58,6 +77,6 @@ Declared metadata remains the domain source of truth.
 
 ## Operational use
 
-Run the check in CI against a migrated PostgreSQL database, during non-production
-startup, or as a deployment diagnostic. A clean check complements migrations;
-it does not replace them.
+Run the check in CI against PostgreSQL, during non-production startup, or as a
+deployment diagnostic. Schema creation initializes missing resources; the
+consistency checker identifies differences that require an explicit migration.

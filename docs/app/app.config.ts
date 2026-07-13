@@ -155,7 +155,7 @@ export default defineAppConfig({
     title: 'Table of Contents',
     bottom: {
       title: 'Community',
-      edit: 'https://github.com/opensya/persistence/edit/main/content',
+      edit: 'https://github.com/opensya/persistence/edit/main/docs/content',
       issue: ' https://github.com/opensya/persistence/issues/new/choose',
 
       links: [

@@ -81,7 +81,7 @@ and don't require prior discussion.
   keep it consistent for non-French-speaking users.
 - Keep the adapter interface (`DatabaseAdapter`) database-agnostic. If a
   change only makes sense for Postgres/Drizzle, it belongs in
-  `src/adapter/drizzle-adapter.ts`, not in the query engine.
+  `packages/core/src/adapter/postgre-adapter.ts`, not in the query engine.
 - New metadata fields (e.g. on `TableMetadata`, `ColumnMetadata`) should be
   **optional** whenever possible, to avoid breaking existing table
   definitions in downstream apps.

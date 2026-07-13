@@ -1,4 +1,23 @@
 import type { TableMetadata } from "../metadata/types.js";
+import type {
+  ApplyMigrationsOptions,
+  MigrationApplyResult,
+  MigrationArtifact,
+  MigrationPlan,
+  MigrationStatusEntry,
+} from "../migrations/types.js";
+
+export interface SchemaCreationOptions {
+  /** Create declared foreign-key constraints when the adapter supports them. */
+  foreignKeys?: boolean;
+}
+
+export interface SchemaCreationResult {
+  /** Logical metadata names for resources created by this call. */
+  created: string[];
+  /** Logical metadata names whose physical resources already existed. */
+  skipped: string[];
+}
 
 export type FilterOperator =
   | "eq"
@@ -31,6 +50,36 @@ export interface QueryParams {
   orderBy?: { field: string; direction: "asc" | "desc" }[];
 }
 
+export type AggregateFunction =
+  | "count"
+  | "sum"
+  | "avg"
+  | "min"
+  | "max"
+  | "collect";
+
+export interface AggregateMetric {
+  function: AggregateFunction;
+  /** Optional only for count, where omission means COUNT(*). */
+  field?: string;
+}
+
+export interface AggregateQuery {
+  where?: QueryFilter;
+  groupBy?: string[];
+  metrics: Record<string, AggregateMetric>;
+}
+
+export type AggregateRow<
+  TQuery extends AggregateQuery = AggregateQuery,
+> = Record<
+  TQuery["groupBy"] extends readonly string[]
+    ? TQuery["groupBy"][number]
+    : never,
+  unknown
+> &
+  Record<keyof TQuery["metrics"], unknown>;
+
 export interface DatabaseAdapter {
   findMany<T = Record<string, unknown>>(
     table: string,
@@ -41,6 +90,12 @@ export interface DatabaseAdapter {
     table: string,
     params?: QueryParams,
   ): Promise<T | null>;
+
+  /** Optional native aggregation capability. */
+  aggregate?(
+    table: string,
+    query: AggregateQuery,
+  ): Promise<AggregateRow[]>;
 
   insert<T = Record<string, unknown>>(
     table: string,
@@ -61,6 +116,28 @@ export interface DatabaseAdapter {
 
   buildTable(meta: TableMetadata): unknown;
   introspect(): Promise<TableMetadata[]>;
+
+  /**
+   * Optional schema-management capability. Adapters that implement it can
+   * create their physical resources from Persistence metadata.
+   */
+  createTables?(
+    tables: readonly TableMetadata[],
+    options?: SchemaCreationOptions,
+  ): Promise<SchemaCreationResult>;
+
+  planMigrations?(
+    migrations: readonly MigrationArtifact[],
+  ): Promise<MigrationPlan>;
+
+  migrationStatus?(
+    migrations: readonly MigrationArtifact[],
+  ): Promise<MigrationStatusEntry[]>;
+
+  applyMigrations?(
+    migrations: readonly MigrationArtifact[],
+    options?: ApplyMigrationsOptions,
+  ): Promise<MigrationApplyResult>;
 }
 
 export function hasFilterConstraints(filter: QueryFilter | undefined): boolean {

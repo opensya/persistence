@@ -40,13 +40,13 @@ const audit = createAuditManager(
   createDatabaseAuditWriter('auditLogs')
 )
 
-const engine = createQueryEngine(
+const engine = createQueryEngine({
   registry,
   adapter,
   hooks,
   serializer,
   audit
-)
+})
 ```
 
 ## Entry shape

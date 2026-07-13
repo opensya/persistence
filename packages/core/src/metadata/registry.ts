@@ -65,6 +65,7 @@ export class MetadataRegistry<
       collectionNames.add(table.collectionName);
       this.validateColumns(table, errors);
       this.validateAudit(table, errors);
+      this.validateOptimisticLock(table, errors);
       this.validateRelations(table, errors);
     }
 
@@ -151,6 +152,44 @@ export class MetadataRegistry<
           message: `Audit configuration excludes unknown field "${field}".`,
         });
       }
+    }
+  }
+
+  private validateOptimisticLock(
+    table: TableMetadata,
+    errors: RegistryValidationError[],
+  ): void {
+    const lock = table.optimisticLock;
+    if (!lock) return;
+
+    const column = table.columns.find((item) => item.name === lock.field);
+    if (!column) {
+      errors.push({
+        table: table.name,
+        message: `Optimistic lock references unknown field "${lock.field}".`,
+      });
+      return;
+    }
+    if (column.type !== "integer" || column.nullable) {
+      errors.push({
+        table: table.name,
+        message: `Optimistic lock field "${lock.field}" must be a non-null integer.`,
+      });
+    }
+    if (column.transform) {
+      errors.push({
+        table: table.name,
+        message: `Optimistic lock field "${lock.field}" cannot declare a transform.`,
+      });
+    }
+    if (
+      lock.initialVersion !== undefined &&
+      (!Number.isInteger(lock.initialVersion) || lock.initialVersion < 0)
+    ) {
+      errors.push({
+        table: table.name,
+        message: "Optimistic lock initialVersion must be a non-negative integer.",
+      });
     }
   }
 

@@ -7,8 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-No version has been tagged/published yet — `package.json` currently sits at
-`0.3.0` as a pre-release working version.
+No unreleased changes yet.
+
+## [0.5.0] - 2026-07-13
+
+### Changed
+
+- `createQueryEngine()` now accepts a named options object containing
+  `registry`, `adapter`, `hooks`, `serializer`, `audit` and `outbox`. This
+  replaces the positional signature and makes optional dependency injection
+  explicit and less error-prone.
+
+### Added
+
+- **Typed JSON columns.** JSON metadata can declare
+  `$type: like<Shape>()`, which is preserved by `defineTable()` and used by
+  entity inference without creating a runtime value. Adapters ignore it,
+  nullable fields retain `null`, and JSON columns without `$type` remain
+  `unknown` for backward compatibility.
+- **Aggregate queries.** `QueryEngine.aggregate()` exposes adapter-neutral
+  `count`, `sum`, `avg`, `min`, `max` and `collect` metrics with filters and
+  grouping. `collect` gathers a field from all rows in each group into an
+  adapter-native array.
+  `PostgreAdapter` executes native aggregate SQL, while unsupported adapters
+  fail explicitly. Metadata-aware validation rejects unknown fields, invalid
+  numeric operations, alias collisions and aggregation of protected fields.
+- **Optimistic locking.** Tables can designate a non-null integer version
+  field with `optimisticLock`. Creates assign the configured initial version;
+  updates require the caller's expected version, add it to the atomic update
+  filter and increment it on success. Missing and stale versions fail with
+  dedicated errors, preventing concurrent writes from silently overwriting
+  newer data. Registry validation rejects invalid version fields.
+- Columns can declare an asynchronous `transform(value, context)` function.
+  It runs after input validation and `before` lifecycle hooks, immediately
+  before create or update data reaches the adapter. Updates transform only
+  fields present in the patch, enabling use cases such as password hashing,
+  encryption and normalization without affecting stored values on unrelated
+  updates.
+
+- **Metadata-driven migrations.** Persistence can capture serializable schema
+  snapshots, generate deterministic migration artifacts, classify operations
+  as safe, destructive or irreversible, and expose plans before execution.
+  `PostgreAdapter` renders and applies migrations transactionally, records
+  identifiers and checksums in `_opensya_migrations`, prevents concurrent
+  runners with an advisory lock, supports dry runs and skips migrations that
+  were already applied. Migration APIs are available through
+  `engine.migrations` and the `@opensya/persistence/migrations` export.
+  Node.js filesystem helpers load ordered JSON artifacts, resolve the latest
+  schema snapshot and save migrations with numbered sequence prefixes.
+
+## [0.4.0] - 2026-07-12
+
+### Added
+
+- **Metadata-driven schema creation.** A locked registry can now create its
+  physical database resources through `engine.schema.createTables()`. Schema
+  creation is adapter-driven, idempotent and non-destructive by default. The
+  Drizzle PostgreSQL adapter creates missing tables, columns, primary keys,
+  unique constraints, declared indexes and supported foreign keys inside a
+  transaction. Existing tables are preserved and reported as skipped, while
+  adapters without schema support fail with an explicit capability error.
+
+### Changed
+
+- Renamed `DrizzleAdapter` to `PostgreAdapter` and `createDrizzleAdapter()` to
+  `createPostgreAdapter()` to identify the supported database rather than the
+  internal query builder used by the implementation.
+
+## [0.3.2] - 2026-07-12
 
 ### Added
 
@@ -85,11 +151,11 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 ### Changed
 
-- `DrizzleAdapter.introspect()` now derives `ColumnMetadata.unique` from real
+- `PostgreAdapter.introspect()` now derives `ColumnMetadata.unique` from real
   database state instead of always returning `false`. It also introspects
   standalone indexes via `pg_index`/`pg_class`, distinguishing them from the
   single-column unique indexes that back `column.unique`.
-- `DrizzleAdapter.buildTable()` now creates the indexes declared in
+- `PostgreAdapter.buildTable()` now creates the indexes declared in
   `TableMetadata.indexes` on the underlying Drizzle table.
 - `MetadataRegistry.validate()` now validates declared indexes (duplicate
   names, empty field lists, references to unknown fields).
@@ -103,3 +169,7 @@ No version has been tagged/published yet — `package.json` currently sits at
 
 - `OPENSYA_DATABASE_VERSION` previously reported `0.0.1` regardless of the
   actual package version.
+
+[Unreleased]: https://github.com/opensya/persistence/compare/v0.4.0...HEAD
+[0.3.2]: https://github.com/opensya/persistence/releases/tag/v0.3.2
+[0.4.0]: https://github.com/opensya/persistence/releases/tag/v0.4.0
