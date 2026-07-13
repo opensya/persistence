@@ -9,9 +9,47 @@ Persistence migrations describe how a versioned schema snapshot evolves into
 the metadata currently registered by the application. The generated artifact
 is database-neutral; the active adapter renders and executes its operations.
 
-## Generate a migration
+## Store migration files
 
-The first migration starts from an empty snapshot:
+Persistence includes filesystem helpers for keeping ordered JSON artifacts in
+source control. `loadMigrations()` reads numbered files in lexical order,
+`lastMigration()` returns the last recorded schema snapshot, and
+`saveMigration()` creates the directory and writes the next numbered file.
+
+```ts
+import {
+  lastMigration,
+  loadMigrations,
+  saveMigration
+} from '@opensya/persistence/migrations'
+
+const directory = './migrations'
+const migrations = await loadMigrations(directory)
+
+const migration = engine.migrations.generate({
+  name: 'add-user-age',
+  previous: lastMigration(migrations)
+})
+
+await saveMigration(directory, migration)
+```
+
+The generated filename uses an ordered prefix, for example:
+
+```text
+migrations/
+├── 001-create-users-a82cdb26e5c1.json
+└── 002-add-user-age-4d79be92fe10.json
+```
+
+When the directory is empty or does not exist, `loadMigrations()` returns an
+empty array and `lastMigration()` returns `EMPTY_SCHEMA_SNAPSHOT`. The same
+workflow therefore handles the first migration without special branching.
+
+## Generate without filesystem helpers
+
+Artifacts can also be managed by another storage layer or build tool. The
+first migration starts from an empty snapshot:
 
 ```ts
 import { writeFile } from 'node:fs/promises'
@@ -31,13 +69,13 @@ await writeFile(
 )
 ```
 
-For the next migration, pass the `next` snapshot from the last committed
+For later migrations, pass the `next` snapshot from the last committed
 artifact:
 
 ```ts
 const migration = engine.migrations.generate({
   name: 'add user status',
-  previous: lastMigration.next
+  previous: migrations.at(-1)?.next ?? EMPTY_SCHEMA_SNAPSHOT
 })
 ```
 
@@ -45,6 +83,13 @@ Snapshots contain only physical schema information. Validators, hooks, field
 visibility and runtime function defaults are not converted into database DDL.
 
 ## Review the plan
+
+Reload the committed artifacts and append a newly generated migration if it
+has not been saved yet:
+
+```ts
+const migrations = await loadMigrations('./migrations')
+```
 
 ```ts
 const plan = await engine.migrations.plan(migrations)
@@ -77,6 +122,10 @@ console.log(result.applied)
 console.log(result.skipped)
 ```
 
+Files must be passed in their numbered order. The loader already guarantees
+that order. Applied migrations are skipped, so the complete list can be used
+for every deployment.
+
 Destructive plans are rejected unless they are explicitly approved after
 review:
 
@@ -100,6 +149,7 @@ checksum. Changing an artifact after an attempt causes a checksum error.
 ## Deployment rules
 
 - Commit generated artifacts with the application code.
+- Use `saveMigration()` or another strategy that preserves an explicit order.
 - Review the rendered plan before deployment.
 - Never edit an applied migration; generate a corrective migration.
 - Require explicit approval for destructive operations.

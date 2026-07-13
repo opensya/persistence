@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   runners with an advisory lock, supports dry runs and skips migrations that
   were already applied. Migration APIs are available through
   `engine.migrations` and the `@opensya/persistence/migrations` export.
+  Node.js filesystem helpers load ordered JSON artifacts, resolve the latest
+  schema snapshot and save migrations with numbered sequence prefixes.
 
 ## [0.4.0] - 2026-07-12
 

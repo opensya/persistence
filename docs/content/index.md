@@ -97,6 +97,7 @@ class: gap-3
 - safe, transactional mutations and lifecycle hooks;
 - explicit relation population and result serialization;
 - transactional audit logs and domain-event outboxes;
+- deterministic schema migrations and ordered migration artifacts;
 - PostgreSQL execution and introspection through Drizzle.
 
 ::callout
@@ -105,6 +106,7 @@ icon: i-tabler-info-circle
 color: neutral
 variant: subtle
 ---
-Persistence does not generate migrations and does not replace Drizzle. It gives
-OpenSya one runtime for executing domain rules around database operations.
+Persistence generates database-neutral migration artifacts and currently
+executes them through `PostgreAdapter`. It uses Drizzle internally for the
+PostgreSQL adapter without making Drizzle part of the application-facing API.
 ::
