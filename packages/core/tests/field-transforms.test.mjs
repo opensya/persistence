@@ -97,6 +97,19 @@ test("field transforms run after validation and before create/update writes", as
     { tenantId: "tenant-1" },
   );
 
+  const publicUser = await engine.findOne("users", {
+    where: { conditions: [{ field: "id", operator: "eq", value: "user-1" }] },
+  });
+  assert.equal("password" in publicUser, false);
+
+  const internalUser = await engine.internal.findOne("users", {
+    where: { conditions: [{ field: "id", operator: "eq", value: "user-1" }] },
+  });
+  assert.equal(internalUser.password, "hashed:plain-secret");
+
+  const internalUsers = await engine.internal.findMany("users");
+  assert.equal(internalUsers[0].password, "hashed:plain-secret");
+
   assert.equal(adapter.row.password, "hashed:plain-secret");
   assert.equal(transformations[0].context.operation, "create");
   assert.equal(transformations[0].context.tenantId, "tenant-1");

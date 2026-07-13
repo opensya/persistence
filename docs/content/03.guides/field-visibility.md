@@ -51,6 +51,44 @@ const employee = await engine.findOne('employees', {
 Resolvers run per entity and may be asynchronous. Dynamically visible fields
 are optional in the inferred result because their presence depends on context.
 
+## Trusted internal reads
+
+Authentication and other trusted application services sometimes need a field
+that must never appear in a public result. Use the explicit internal API for
+that narrow boundary:
+
+```ts
+import argon2 from 'argon2'
+
+const user = await engine.internal.findOne('users', {
+  where: {
+    conditions: [{ field: 'email', operator: 'eq', value: email }]
+  }
+})
+
+const valid = user
+  ? await argon2.verify(user.password, submittedPassword)
+  : false
+```
+
+`engine.internal.findOne()` and `findMany()` bypass the `FieldSerializer` and
+infer the complete entity, including `hidden` and dynamically visible columns.
+They support `where`, ordering, limits and relation population like public
+reads, but do not accept a visibility context because no visibility resolver
+is executed.
+
+::callout
+---
+icon: i-tabler-shield-lock
+color: warning
+variant: subtle
+---
+Internal results may contain passwords, tokens and personal data. Keep them
+inside trusted services, never return them directly from an API handler, and
+explicitly construct the safe object returned after authentication. Populated
+relations are also unserialized.
+::
+
 ## Inject a serializer
 
 `QueryEngine` creates a `FieldSerializer` automatically. Pass one explicitly
