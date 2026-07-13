@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Optimistic locking.** Tables can designate a non-null integer version
+  field with `optimisticLock`. Creates assign the configured initial version;
+  updates require the caller's expected version, add it to the atomic update
+  filter and increment it on success. Missing and stale versions fail with
+  dedicated errors, preventing concurrent writes from silently overwriting
+  newer data. Registry validation rejects invalid version fields.
 - Columns can declare an asynchronous `transform(value, context)` function.
   It runs after input validation and `before` lifecycle hooks, immediately
   before create or update data reaches the adapter. Updates transform only

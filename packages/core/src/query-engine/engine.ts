@@ -22,6 +22,8 @@ import { SchemaManager } from "../sync/schema-manager.js";
 import { FieldSerializer } from "./serializer.js";
 import { CursorCodec } from "./cursor.js";
 import {
+  OptimisticLockError,
+  OptimisticLockVersionRequiredError,
   UnsafeMutationError,
   ValidationError,
   type FieldValidationFailure,
@@ -235,11 +237,13 @@ export class QueryEngine<
     return this.adapter.transaction(async (tx) => {
       const hookContext = this.createHookContext(table, "create", tx, context);
       const withDefaults = await this.applyDefaults(table, data);
-      const resolved = await this.hooks.runBeforeCreate(
+      const initialized = this.initializeOptimisticLock(table, withDefaults);
+      const hooked = await this.hooks.runBeforeCreate(
         tableName,
-        withDefaults,
+        initialized,
         hookContext,
       );
+      const resolved = this.initializeOptimisticLock(table, hooked);
 
       this.assertKnownFields(table, resolved);
       await this.assertValid(table, resolved);
@@ -297,22 +301,41 @@ export class QueryEngine<
       );
       this.assertKnownFields(table, resolvedPatch);
 
+      const optimisticUpdate = this.prepareOptimisticUpdate(
+        table,
+        current,
+        resolvedPatch,
+      );
+
       const merged = { ...current, ...resolvedPatch };
       await this.assertValid(table, merged, Object.keys(resolvedPatch));
       const transformedPatch = await this.transformFields(
         table,
-        resolvedPatch,
+        optimisticUpdate.patch,
         "update",
         context,
       );
 
-      const primaryKeyFilter = this.createPrimaryKeyFilter(table, current);
+      const primaryKeyFilter = this.withOptimisticLockFilter(
+        table,
+        this.createPrimaryKeyFilter(table, current),
+        optimisticUpdate.expectedVersion,
+      );
       const [updated] = await tx.update<Record<string, unknown>>(
         tableName,
         primaryKeyFilter,
         transformedPatch,
       );
-      if (!updated) return null;
+      if (!updated) {
+        if (optimisticUpdate.expectedVersion !== undefined) {
+          throw new OptimisticLockError(
+            table.name,
+            table.optimisticLock!.field,
+            optimisticUpdate.expectedVersion,
+          );
+        }
+        return null;
+      }
 
       await this.hooks.runAfterUpdate(tableName, updated, hookContext);
       await this.audit?.record({
@@ -360,6 +383,10 @@ export class QueryEngine<
       );
       this.assertKnownFields(table, resolvedPatch);
 
+      const optimisticUpdates = currentRows.map((current) =>
+        this.prepareOptimisticUpdate(table, current, resolvedPatch),
+      );
+
       const touchedFields = Object.keys(resolvedPatch);
       for (const current of currentRows) {
         await this.assertValid(
@@ -370,16 +397,32 @@ export class QueryEngine<
       }
       const transformedPatch = await this.transformFields(
         table,
-        resolvedPatch,
+        optimisticUpdates[0]?.patch ?? resolvedPatch,
         "update",
         context,
       );
 
+      const optimisticVersion = optimisticUpdates[0]?.expectedVersion;
+      const updateFilter = this.withOptimisticLockFilter(
+        table,
+        where,
+        optimisticVersion,
+      );
       const updatedRows = await tx.update<Record<string, unknown>>(
         tableName,
-        where,
+        updateFilter,
         transformedPatch,
       );
+      if (
+        optimisticVersion !== undefined &&
+        updatedRows.length !== currentRows.length
+      ) {
+        throw new OptimisticLockError(
+          table.name,
+          table.optimisticLock!.field,
+          optimisticVersion,
+        );
+      }
       for (const updated of updatedRows) {
         await this.hooks.runAfterUpdate(tableName, updated, hookContext);
       }
@@ -484,6 +527,60 @@ export class QueryEngine<
           : column.default;
     }
     return result;
+  }
+
+  private initializeOptimisticLock(
+    table: TableMetadata,
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const lock = table.optimisticLock;
+    if (!lock) return data;
+    return { ...data, [lock.field]: lock.initialVersion ?? 1 };
+  }
+
+  private prepareOptimisticUpdate(
+    table: TableMetadata,
+    current: Record<string, unknown>,
+    patch: Record<string, unknown>,
+  ): { patch: Record<string, unknown>; expectedVersion?: number } {
+    const lock = table.optimisticLock;
+    if (!lock) return { patch };
+
+    const expectedVersion = patch[lock.field];
+    if (!Number.isInteger(expectedVersion)) {
+      throw new OptimisticLockVersionRequiredError(table.name, lock.field);
+    }
+    if (current[lock.field] !== expectedVersion) {
+      throw new OptimisticLockError(
+        table.name,
+        lock.field,
+        expectedVersion as number,
+      );
+    }
+
+    return {
+      patch: { ...patch, [lock.field]: (expectedVersion as number) + 1 },
+      expectedVersion: expectedVersion as number,
+    };
+  }
+
+  private withOptimisticLockFilter(
+    table: TableMetadata,
+    where: QueryFilter,
+    expectedVersion: number | undefined,
+  ): QueryFilter {
+    const lock = table.optimisticLock;
+    if (!lock || expectedVersion === undefined) return where;
+    return {
+      and: [
+        where,
+        {
+          conditions: [
+            { field: lock.field, operator: "eq", value: expectedVersion },
+          ],
+        },
+      ],
+    };
   }
 
   private async transformFields(

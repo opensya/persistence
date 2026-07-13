@@ -153,6 +153,13 @@ export interface AuditMetadata {
   excludedFields?: string[];
 }
 
+export interface OptimisticLockMetadata {
+  /** Logical field name of the non-null integer version column. */
+  field: string;
+  /** Version assigned on creation. Defaults to 1. */
+  initialVersion?: number;
+}
+
 export interface TableMetadata {
   name: string;
   collectionName: string;
@@ -163,4 +170,6 @@ export interface TableMetadata {
   indexes?: IndexMetadata[];
   /** Optional per-table audit configuration. Auditing is disabled by default. */
   audit?: AuditMetadata;
+  /** Enables compare-and-swap updates using an integer version field. */
+  optimisticLock?: OptimisticLockMetadata;
 }

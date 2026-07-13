@@ -37,6 +37,7 @@ Persistence works above the database adapter. Use Drizzle today, or provide your
 - Metadata-driven, strongly typed entities
 - Database-independent Query Engine
 - Validation and lifecycle hooks
+- Field transforms and optimistic locking
 - Explicit relation population
 - Safe transactional mutations
 - Field visibility and serialization
