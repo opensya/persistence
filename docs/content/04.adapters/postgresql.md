@@ -20,7 +20,7 @@ The database must support Drizzle's select, insert, update, delete, execute, and
 ## Schema creation
 
 ```ts
-const engine = createQueryEngine(registry, adapter)
+const engine = createQueryEngine({ registry, adapter })
 const result = await engine.schema.createTables()
 ```
 

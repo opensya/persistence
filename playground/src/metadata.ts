@@ -2,7 +2,13 @@ import {
   createAuditLogMetadata,
   createOutboxMetadata,
   defineTable,
+  like,
 } from "@opensya/persistence";
+
+export interface UserPreferences {
+  theme: "light" | "dark" | "system";
+  notifications: boolean;
+}
 
 export const usersMetadata = defineTable({
   name: "users",
@@ -54,6 +60,17 @@ export const usersMetadata = defineTable({
       primaryKey: false,
       unique: false,
       default: () => new Date(),
+      validators: [],
+    },
+    {
+      name: "preferences",
+      columnName: "preferences",
+      type: "json",
+      $type: like<UserPreferences>(),
+      nullable: false,
+      primaryKey: false,
+      unique: false,
+      default: () => ({ theme: "system", notifications: true }),
       validators: [],
     },
   ],

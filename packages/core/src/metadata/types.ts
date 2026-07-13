@@ -39,15 +39,41 @@ export type FieldVisibilityResolver = (
   ctx: FieldVisibilityContext,
 ) => boolean | Promise<boolean>;
 
+export interface FieldTransformContext {
+  operation: "create" | "update";
+  field: string;
+  table: string;
+  entity: Readonly<Record<string, unknown>>;
+  user: unknown;
+  requestId?: string;
+  tenantId?: string;
+}
+
+export type FieldTransformer = (
+  value: unknown,
+  ctx: FieldTransformContext,
+) => unknown | Promise<unknown>;
+
 export interface ColumnMetadata {
   name: string;
   columnName: string;
   type: ColumnType;
+  /**
+   * Optional compile-time value used to infer the shape of a JSON column.
+   * It is ignored by adapters and has no effect on runtime persistence.
+   */
+  $type?: unknown;
   nullable: boolean;
   primaryKey: boolean;
   unique: boolean;
   default?: unknown | (() => unknown);
   validators: FieldValidatorMetadata[];
+  /**
+   * Transforms a supplied value after validation and lifecycle `before` hooks,
+   * immediately before it is sent to the database adapter. On updates, the
+   * transformer runs only when this field is present in the patch.
+   */
+  transform?: FieldTransformer;
   /**
    * When true, the field is always stripped from query results — it still
    * exists in the database and can still be written to. Takes precedence
@@ -132,6 +158,13 @@ export interface AuditMetadata {
   excludedFields?: string[];
 }
 
+export interface OptimisticLockMetadata {
+  /** Logical field name of the non-null integer version column. */
+  field: string;
+  /** Version assigned on creation. Defaults to 1. */
+  initialVersion?: number;
+}
+
 export interface TableMetadata {
   name: string;
   collectionName: string;
@@ -142,4 +175,6 @@ export interface TableMetadata {
   indexes?: IndexMetadata[];
   /** Optional per-table audit configuration. Auditing is disabled by default. */
   audit?: AuditMetadata;
+  /** Enables compare-and-swap updates using an integer version field. */
+  optimisticLock?: OptimisticLockMetadata;
 }

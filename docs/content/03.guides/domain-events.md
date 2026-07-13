@@ -19,14 +19,14 @@ adapter.buildTable(outboxMetadata)
 
 const outbox = createDatabaseOutboxWriter('outboxEvents')
 
-const engine = createQueryEngine(
+const engine = createQueryEngine({
   registry,
   adapter,
   hooks,
   serializer,
   audit,
   outbox
-)
+})
 ```
 
 Create the physical `outbox_events` table with migrations. The metadata helper

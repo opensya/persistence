@@ -4,6 +4,7 @@ import { relationsAndSerializationScenario } from "./scenarios/02-relations-and-
 import { auditAndDomainEventsScenario } from "./scenarios/03-audit-and-domain-events.js";
 import { cursorPaginationScenario } from "./scenarios/04-cursor-pagination.js";
 import { migrationsScenario } from "./scenarios/05-migrations.js";
+import { aggregateQueriesScenario } from "./scenarios/06-aggregate-queries.js";
 
 const scenarios = [
   schemaCreationScenario,
@@ -12,6 +13,7 @@ const scenarios = [
   auditAndDomainEventsScenario,
   cursorPaginationScenario,
   migrationsScenario,
+  aggregateQueriesScenario,
 ];
 
 console.log("OpenSya Persistence playground\n");

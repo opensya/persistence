@@ -15,7 +15,7 @@ const hooks = createHooksRegistry()
 hooks.onBeforeCreate('users', normalizeEmail)
 hooks.onAfterCreate('users', createProfile)
 
-const engine = createQueryEngine(registry, adapter, hooks)
+const engine = createQueryEngine({ registry, adapter, hooks })
 ```
 
 ## Before hooks

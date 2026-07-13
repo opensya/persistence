@@ -1,5 +1,6 @@
 import {
   and,
+  avg,
   asc,
   desc,
   eq,
@@ -10,11 +11,15 @@ import {
   isNull,
   lt,
   lte,
+  max,
+  min,
   ne,
   not,
   notInArray,
   or,
   sql,
+  sum,
+  count,
   type SQL,
 } from "drizzle-orm";
 import {
@@ -60,6 +65,9 @@ import type {
 } from "../migrations/types.js";
 import {
   hasFilterConstraints,
+  type AggregateMetric,
+  type AggregateQuery,
+  type AggregateRow,
   type DatabaseAdapter,
   type FilterCondition,
   type QueryFilter,
@@ -157,6 +165,40 @@ export class PostgreAdapter implements DatabaseAdapter {
   ): Promise<T | null> {
     const rows = await this.findMany<T>(tableName, { ...params, limit: 1 });
     return rows[0] ?? null;
+  }
+
+  async aggregate(
+    tableName: string,
+    query: AggregateQuery,
+  ): Promise<AggregateRow[]> {
+    const table = this.getTable(tableName);
+    this.assertFilterFields(tableName, query.where);
+    this.assertFields(tableName, query.groupBy ?? []);
+    this.assertFields(
+      tableName,
+      Object.values(query.metrics).flatMap((metric) =>
+        metric.field ? [metric.field] : [],
+      ),
+    );
+
+    // Drizzle cannot express a selection whose aliases come from runtime
+    // metadata, but every value added below is a column or SQL expression.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const selection: Record<string, any> = {};
+    for (const field of query.groupBy ?? []) selection[field] = table[field];
+    for (const [alias, metric] of Object.entries(query.metrics)) {
+      selection[alias] = this.buildAggregateMetric(table, metric);
+    }
+
+    let aggregateQuery = this.db.select(selection).from(table).$dynamic();
+    const where = this.buildWhere(table, query.where);
+    if (where) aggregateQuery = aggregateQuery.where(where);
+    if (query.groupBy?.length) {
+      aggregateQuery = aggregateQuery.groupBy(
+        ...query.groupBy.map((field) => table[field]),
+      );
+    }
+    return aggregateQuery as unknown as Promise<AggregateRow[]>;
   }
 
   async insert<T = Record<string, unknown>>(
@@ -1013,6 +1055,27 @@ export class PostgreAdapter implements DatabaseAdapter {
     }
 
     return parts.length === 1 ? parts[0] : and(...parts);
+  }
+
+  private buildAggregateMetric(
+    table: BuiltTable,
+    metric: AggregateMetric,
+  ): unknown {
+    const column = metric.field ? table[metric.field] : undefined;
+    switch (metric.function) {
+      case "count":
+        return column ? count(column) : count();
+      case "sum":
+        return sum(column!);
+      case "avg":
+        return avg(column!);
+      case "min":
+        return min(column!);
+      case "max":
+        return max(column!);
+      case "collect":
+        return sql<unknown[]>`array_agg(${column!})`;
+    }
   }
 
   private buildCondition(table: BuiltTable, condition: FilterCondition): SQL {

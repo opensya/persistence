@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `createQueryEngine()` now accepts a named options object containing
+  `registry`, `adapter`, `hooks`, `serializer`, `audit` and `outbox`. This
+  replaces the positional signature and makes optional dependency injection
+  explicit and less error-prone.
+
+### Added
+
+- **Typed JSON columns.** JSON metadata can declare
+  `$type: like<Shape>()`, which is preserved by `defineTable()` and used by
+  entity inference without creating a runtime value. Adapters ignore it,
+  nullable fields retain `null`, and JSON columns without `$type` remain
+  `unknown` for backward compatibility.
+- **Aggregate queries.** `QueryEngine.aggregate()` exposes adapter-neutral
+  `count`, `sum`, `avg`, `min`, `max` and `collect` metrics with filters and
+  grouping. `collect` gathers a field from all rows in each group into an
+  adapter-native array.
+  `PostgreAdapter` executes native aggregate SQL, while unsupported adapters
+  fail explicitly. Metadata-aware validation rejects unknown fields, invalid
+  numeric operations, alias collisions and aggregation of protected fields.
+- **Optimistic locking.** Tables can designate a non-null integer version
+  field with `optimisticLock`. Creates assign the configured initial version;
+  updates require the caller's expected version, add it to the atomic update
+  filter and increment it on success. Missing and stale versions fail with
+  dedicated errors, preventing concurrent writes from silently overwriting
+  newer data. Registry validation rejects invalid version fields.
+- Columns can declare an asynchronous `transform(value, context)` function.
+  It runs after input validation and `before` lifecycle hooks, immediately
+  before create or update data reaches the adapter. Updates transform only
+  fields present in the patch, enabling use cases such as password hashing,
+  encryption and normalization without affecting stored values on unrelated
+  updates.
+
 ### Added
 
 - **Metadata-driven migrations.** Persistence can capture serializable schema

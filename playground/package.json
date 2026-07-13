@@ -10,7 +10,8 @@
     "test:relations": "tsx --env-file=.env src/scenarios/02-relations-and-serialization.ts",
     "test:audit-events": "tsx --env-file=.env src/scenarios/03-audit-and-domain-events.ts",
     "test:pagination": "tsx --env-file=.env src/scenarios/04-cursor-pagination.ts",
-    "test:migrations": "tsx --env-file=.env src/scenarios/05-migrations.ts"
+    "test:migrations": "tsx --env-file=.env src/scenarios/05-migrations.ts",
+    "test:aggregates": "tsx --env-file=.env src/scenarios/06-aggregate-queries.ts"
   },
   "dependencies": {
     "@opensya/persistence": "workspace:*",

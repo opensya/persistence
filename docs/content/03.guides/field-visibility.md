@@ -51,6 +51,42 @@ const employee = await engine.findOne('employees', {
 Resolvers run per entity and may be asynchronous. Dynamically visible fields
 are optional in the inferred result because their presence depends on context.
 
+## Inject a serializer
+
+`QueryEngine` creates a `FieldSerializer` automatically. Pass one explicitly
+when the application needs to share, extend or instrument the serialization
+step:
+
+```ts
+import {
+  createFieldSerializer,
+  createQueryEngine
+} from '@opensya/persistence'
+
+const serializer = createFieldSerializer(registry)
+
+const engine = createQueryEngine({
+  registry,
+  adapter,
+  hooks,
+  serializer,
+  audit,
+  outbox
+})
+```
+
+The serializer runs after database reads and relation population, immediately
+before results are returned to the caller. It applies every column's `hidden`
+and `visibility` rules recursively to populated relations. It does not change
+stored values or the complete entities received by validators and lifecycle
+hooks.
+
+Most applications should omit this option and use the default serializer:
+
+```ts
+const engine = createQueryEngine({ registry, adapter })
+```
+
 ::callout
 ---
 icon: i-tabler-shield-exclamation
