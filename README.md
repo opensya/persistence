@@ -42,7 +42,7 @@ Persistence works above the database adapter. Use Drizzle today, or provide your
 - Field visibility and serialization
 - Transactional audit logs and domain events
 - Stable cursor pagination
-- Drizzle PostgreSQL adapter
+- PostgreSQL adapter
 
 ---
 

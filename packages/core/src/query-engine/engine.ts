@@ -16,6 +16,7 @@ import type {
   TableMetadataMap,
 } from "../metadata/inference.js";
 import type { ColumnMetadata, TableMetadata } from "../metadata/types.js";
+import { MigrationManager } from "../migrations/manager.js";
 import { RelationResolver } from "../relations/resolver.js";
 import { SchemaManager } from "../sync/schema-manager.js";
 import { FieldSerializer } from "./serializer.js";
@@ -53,6 +54,7 @@ export class QueryEngine<
   TTables extends TableMetadataMap = Record<never, never>,
 > {
   readonly schema: SchemaManager;
+  readonly migrations: MigrationManager;
 
   constructor(
     private readonly registry: MetadataRegistry<TTables>,
@@ -64,6 +66,7 @@ export class QueryEngine<
     private readonly cursor = new CursorCodec(),
   ) {
     this.schema = new SchemaManager(registry, adapter);
+    this.migrations = new MigrationManager(registry, adapter);
   }
 
   transaction<TResult>(

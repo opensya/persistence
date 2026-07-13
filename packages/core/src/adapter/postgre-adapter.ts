@@ -40,6 +40,24 @@ import type {
   RelationMetadata,
   TableMetadata,
 } from "../metadata/types.js";
+import { stableStringify } from "../migrations/serialization.js";
+import {
+  DestructiveMigrationError,
+  MigrationChecksumError,
+} from "../migrations/errors.js";
+import type {
+  ApplyMigrationsOptions,
+  MigrationApplyResult,
+  MigrationArtifact,
+  MigrationOperation,
+  MigrationPlan,
+  MigrationStatusEntry,
+  MigrationValue,
+  SchemaColumnSnapshot,
+  SchemaForeignKeySnapshot,
+  SchemaIndexSnapshot,
+  SchemaTableSnapshot,
+} from "../migrations/types.js";
 import {
   hasFilterConstraints,
   type DatabaseAdapter,
@@ -58,6 +76,16 @@ type BuiltTable = PgTableWithColumns<any>;
 type TransactionCapableDatabase = AnyPgDatabase & {
   transaction<T>(callback: (tx: AnyPgDatabase) => Promise<T>): Promise<T>;
 };
+
+class MigrationExecutionError extends Error {
+  constructor(
+    readonly migration: MigrationArtifact,
+    cause: unknown,
+  ) {
+    super(`Migration "${migration.id}" failed.`, { cause });
+    this.name = "MigrationExecutionError";
+  }
+}
 
 export class PostgreAdapter implements DatabaseAdapter {
   constructor(
@@ -195,6 +223,394 @@ export class PostgreAdapter implements DatabaseAdapter {
         options,
       ),
     );
+  }
+
+  async planMigrations(
+    migrations: readonly MigrationArtifact[],
+  ): Promise<MigrationPlan> {
+    return {
+      migrations: migrations.map((migration) => ({
+        migrationId: migration.id,
+        statements: migration.operations.flatMap((operation) =>
+          this.renderMigrationOperation(operation),
+        ),
+      })),
+      destructive: migrations.some((migration) =>
+        migration.operations.some((operation) => operation.safety !== "safe"),
+      ),
+      irreversible: migrations.some((migration) =>
+        migration.operations.some(
+          (operation) => operation.safety === "irreversible",
+        ),
+      ),
+    };
+  }
+
+  async migrationStatus(
+    migrations: readonly MigrationArtifact[],
+  ): Promise<MigrationStatusEntry[]> {
+    await this.ensureMigrationHistory(this.db);
+    const applied = await this.readAppliedMigrations(this.db);
+    return migrations.map((migration) => {
+      const record = applied.get(migration.id);
+      if (record && record.checksum !== migration.checksum) {
+        throw new MigrationChecksumError(migration.id);
+      }
+      return {
+        id: migration.id,
+        name: migration.name,
+        checksum: migration.checksum,
+        status: record?.status ?? "pending",
+        ...(record?.appliedAt ? { appliedAt: record.appliedAt } : {}),
+        ...(record?.error ? { error: record.error } : {}),
+      };
+    });
+  }
+
+  async applyMigrations(
+    migrations: readonly MigrationArtifact[],
+    options: ApplyMigrationsOptions = {},
+  ): Promise<MigrationApplyResult> {
+    const plan = await this.planMigrations(migrations);
+    if (options.dryRun) {
+      return { applied: [], skipped: [], plan, dryRun: true };
+    }
+    if ((plan.destructive || plan.irreversible) && !options.allowDestructive) {
+      throw new DestructiveMigrationError();
+    }
+    await this.ensureMigrationHistory(this.db);
+    const database = this.db as TransactionCapableDatabase;
+    try {
+      const result = await database.transaction((tx) =>
+        this.applyMigrationsInTransaction(tx, migrations),
+      );
+      return { ...result, plan, dryRun: false };
+    } catch (error) {
+      if (error instanceof MigrationExecutionError) {
+        await this.recordMigrationFailure(error.migration, error.cause);
+      }
+      throw error;
+    }
+  }
+
+  private async applyMigrationsInTransaction(
+    database: AnyPgDatabase,
+    migrations: readonly MigrationArtifact[],
+  ): Promise<{ applied: string[]; skipped: string[] }> {
+    await database.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('opensya:persistence:migrations'))`,
+    );
+    const records = await this.readAppliedMigrations(database);
+    const applied: string[] = [];
+    const skipped: string[] = [];
+
+    for (const migration of migrations) {
+      const record = records.get(migration.id);
+      if (record) {
+        if (record.checksum !== migration.checksum) {
+          throw new MigrationChecksumError(migration.id);
+        }
+        if (record.status === "applied") {
+          skipped.push(migration.id);
+          continue;
+        }
+      }
+
+      const startedAt = performance.now();
+      try {
+        for (const operation of migration.operations) {
+          for (const statement of this.renderMigrationOperation(operation)) {
+            await database.execute(sql.raw(statement));
+          }
+        }
+      } catch (error) {
+        throw new MigrationExecutionError(migration, error);
+      }
+      const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
+      await database.execute(sql`
+        INSERT INTO "_opensya_migrations"
+          (id, name, checksum, status, applied_at, duration_ms, last_error)
+        VALUES
+          (${migration.id}, ${migration.name}, ${migration.checksum}, 'applied', NOW(), ${durationMs}, NULL)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          checksum = EXCLUDED.checksum,
+          status = 'applied',
+          applied_at = EXCLUDED.applied_at,
+          duration_ms = EXCLUDED.duration_ms,
+          last_error = NULL
+      `);
+      applied.push(migration.id);
+    }
+
+    return { applied, skipped };
+  }
+
+  private async ensureMigrationHistory(database: AnyPgDatabase): Promise<void> {
+    await database.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS "_opensya_migrations" (
+        "id" TEXT PRIMARY KEY,
+        "name" TEXT NOT NULL,
+        "checksum" TEXT NOT NULL,
+        "status" TEXT NOT NULL,
+        "applied_at" TIMESTAMPTZ,
+        "duration_ms" INTEGER NOT NULL DEFAULT 0,
+        "last_error" TEXT
+      )
+    `));
+  }
+
+  private async readAppliedMigrations(
+    database: AnyPgDatabase,
+  ): Promise<
+    Map<
+      string,
+      {
+        checksum: string;
+        status: "applied" | "failed";
+        appliedAt?: string;
+        error?: string;
+      }
+    >
+  > {
+    const result = (await database.execute(sql`
+      SELECT id, checksum, status, applied_at, last_error
+      FROM "_opensya_migrations"
+      ORDER BY applied_at NULLS LAST, id
+    `)) as {
+      rows: {
+        id: string;
+        checksum: string;
+        status: "applied" | "failed";
+        applied_at: Date | string | null;
+        last_error: string | null;
+      }[];
+    };
+    return new Map(
+      result.rows.map((row) => [
+        row.id,
+        {
+          checksum: row.checksum,
+          status: row.status,
+          ...(row.applied_at
+            ? {
+                appliedAt:
+                  row.applied_at instanceof Date
+                    ? row.applied_at.toISOString()
+                    : new Date(row.applied_at).toISOString(),
+              }
+            : {}),
+          ...(row.last_error ? { error: row.last_error } : {}),
+        },
+      ]),
+    );
+  }
+
+  private async recordMigrationFailure(
+    migration: MigrationArtifact,
+    cause: unknown,
+  ): Promise<void> {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    await this.db.execute(sql`
+      INSERT INTO "_opensya_migrations"
+        (id, name, checksum, status, duration_ms, last_error)
+      VALUES
+        (${migration.id}, ${migration.name}, ${migration.checksum}, 'failed', 0, ${message})
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        checksum = EXCLUDED.checksum,
+        status = 'failed',
+        applied_at = NULL,
+        duration_ms = 0,
+        last_error = EXCLUDED.last_error
+    `);
+  }
+
+  private renderMigrationOperation(
+    operation: MigrationOperation,
+  ): string[] {
+    switch (operation.kind) {
+      case "createTable":
+        return [this.createSnapshotTableStatement(operation.table)];
+      case "dropTable":
+        return [`DROP TABLE ${this.quoteIdentifier(operation.table.collectionName)}`];
+      case "addColumn":
+        return [
+          `ALTER TABLE ${this.quoteIdentifier(operation.table)} ADD COLUMN ${this.snapshotColumnDefinition(operation.column)}`,
+        ];
+      case "dropColumn":
+        return [
+          `ALTER TABLE ${this.quoteIdentifier(operation.table)} DROP COLUMN ${this.quoteIdentifier(operation.column.columnName)}`,
+        ];
+      case "alterColumn":
+        return this.alterSnapshotColumnStatements(
+          operation.table,
+          operation.before,
+          operation.after,
+        );
+      case "createIndex":
+        return [this.createSnapshotIndexStatement(operation.table, operation.index)];
+      case "dropIndex":
+        return [`DROP INDEX IF EXISTS ${this.quoteIdentifier(operation.index.name)}`];
+      case "addForeignKey":
+        return [
+          this.addSnapshotForeignKeyStatement(
+            operation.table,
+            operation.foreignKey,
+          ),
+        ];
+      case "dropForeignKey":
+        return [
+          `ALTER TABLE ${this.quoteIdentifier(operation.table)} DROP CONSTRAINT IF EXISTS ${this.quoteIdentifier(operation.foreignKey.name)}`,
+        ];
+    }
+  }
+
+  private createSnapshotTableStatement(table: SchemaTableSnapshot): string {
+    const definitions = table.columns.map((column) =>
+      this.snapshotColumnDefinition(column, false),
+    );
+    const primaryKeys = table.columns.filter((column) => column.primaryKey);
+    if (primaryKeys.length) {
+      definitions.push(
+        `PRIMARY KEY (${primaryKeys
+          .map((column) => this.quoteIdentifier(column.columnName))
+          .join(", ")})`,
+      );
+    }
+    return `CREATE TABLE ${this.quoteIdentifier(table.collectionName)} (${definitions.join(", ")})`;
+  }
+
+  private snapshotColumnDefinition(
+    column: SchemaColumnSnapshot,
+    includePrimaryKey = true,
+  ): string {
+    const parts = [
+      this.quoteIdentifier(column.columnName),
+      this.snapshotColumnTypeToSql(column),
+    ];
+    if (!column.nullable) parts.push("NOT NULL");
+    if (column.unique && !column.primaryKey) parts.push("UNIQUE");
+    if (includePrimaryKey && column.primaryKey) parts.push("PRIMARY KEY");
+    const defaultSql = this.snapshotDefaultToSql(column);
+    if (defaultSql !== undefined) parts.push(`DEFAULT ${defaultSql}`);
+    return parts.join(" ");
+  }
+
+  private alterSnapshotColumnStatements(
+    table: string,
+    before: SchemaColumnSnapshot,
+    after: SchemaColumnSnapshot,
+  ): string[] {
+    const prefix = `ALTER TABLE ${this.quoteIdentifier(table)}`;
+    const column = this.quoteIdentifier(after.columnName);
+    const statements: string[] = [];
+    if (before.type !== after.type) {
+      statements.push(
+        `${prefix} ALTER COLUMN ${column} TYPE ${this.snapshotColumnTypeToSql(after)}`,
+      );
+    }
+    if (before.nullable !== after.nullable) {
+      statements.push(
+        `${prefix} ALTER COLUMN ${column} ${after.nullable ? "DROP" : "SET"} NOT NULL`,
+      );
+    }
+    if (stableStringify(before.default) !== stableStringify(after.default)) {
+      const defaultSql = this.snapshotDefaultToSql(after);
+      statements.push(
+        defaultSql === undefined
+          ? `${prefix} ALTER COLUMN ${column} DROP DEFAULT`
+          : `${prefix} ALTER COLUMN ${column} SET DEFAULT ${defaultSql}`,
+      );
+    }
+    if (before.unique !== after.unique) {
+      const constraint = this.quoteIdentifier(
+        this.constraintName(table, after.columnName, "key"),
+      );
+      statements.push(
+        after.unique
+          ? `${prefix} ADD CONSTRAINT ${constraint} UNIQUE (${column})`
+          : `${prefix} DROP CONSTRAINT IF EXISTS ${constraint}`,
+      );
+    }
+    if (before.primaryKey !== after.primaryKey) {
+      const constraint = this.quoteIdentifier(
+        this.constraintName(table, "", "pkey"),
+      );
+      statements.push(
+        after.primaryKey
+          ? `${prefix} ADD CONSTRAINT ${constraint} PRIMARY KEY (${column})`
+          : `${prefix} DROP CONSTRAINT IF EXISTS ${constraint}`,
+      );
+    }
+    return statements;
+  }
+
+  private createSnapshotIndexStatement(
+    table: string,
+    index: SchemaIndexSnapshot,
+  ): string {
+    return `CREATE ${index.unique ? "UNIQUE " : ""}INDEX ${this.quoteIdentifier(index.name)} ON ${this.quoteIdentifier(table)} (${index.fields.map((field) => this.quoteIdentifier(field)).join(", ")})`;
+  }
+
+  private addSnapshotForeignKeyStatement(
+    table: string,
+    foreignKey: SchemaForeignKeySnapshot,
+  ): string {
+    return `ALTER TABLE ${this.quoteIdentifier(table)} ADD CONSTRAINT ${this.quoteIdentifier(foreignKey.name)} FOREIGN KEY (${this.quoteIdentifier(foreignKey.field)}) REFERENCES ${this.quoteIdentifier(foreignKey.targetTable)} (${this.quoteIdentifier(foreignKey.targetField)})`;
+  }
+
+  private snapshotColumnTypeToSql(column: SchemaColumnSnapshot): string {
+    return this.columnTypeToSql(column);
+  }
+
+  private snapshotDefaultToSql(
+    column: SchemaColumnSnapshot,
+  ): string | undefined {
+    if (!column.default || column.default.kind === "runtime") return undefined;
+    return this.migrationValueToSql(column, column.default.value);
+  }
+
+  private migrationValueToSql(
+    column: SchemaColumnSnapshot,
+    value: MigrationValue,
+  ): string {
+    if (value === null) return "NULL";
+    if (column.type === "json") {
+      return `${this.quoteLiteral(JSON.stringify(this.migrationJsonValue(value)))}::jsonb`;
+    }
+    if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+    if (typeof value === "number") return value.toString();
+    if (typeof value === "string") return this.quoteLiteral(value);
+    if (!Array.isArray(value) && value.$type === "bigint") {
+      return String(value.value);
+    }
+    if (!Array.isArray(value) && value.$type === "date") {
+      return this.quoteLiteral(String(value.value));
+    }
+    throw new Error(
+      `Unsupported static migration default for column "${column.name}".`,
+    );
+  }
+
+  private migrationJsonValue(value: MigrationValue): unknown {
+    if (Array.isArray(value)) return value.map((item) => this.migrationJsonValue(item));
+    if (value !== null && typeof value === "object") {
+      if (value.$type === "bigint" || value.$type === "date") {
+        return value.value;
+      }
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+          key,
+          this.migrationJsonValue(item),
+        ]),
+      );
+    }
+    return value;
+  }
+
+  private constraintName(table: string, column: string, suffix: string): string {
+    return [table, column, suffix].filter(Boolean).join("_").slice(0, 63);
   }
 
   /**
@@ -466,7 +882,7 @@ export class PostgreAdapter implements DatabaseAdapter {
     return `${name.slice(0, 54)}_${suffix}`;
   }
 
-  private columnTypeToSql(column: ColumnMetadata): string {
+  private columnTypeToSql(column: Pick<ColumnMetadata, "type">): string {
     switch (column.type) {
       case "uuid":
         return "UUID";

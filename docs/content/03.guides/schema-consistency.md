@@ -19,7 +19,7 @@ creates missing resources and declared indexes, but never removes tables,
 columns or application data. The registry must be locked first. Adapters that
 do not implement schema creation throw `SchemaCreationNotSupportedError`.
 
-The Drizzle PostgreSQL adapter creates all tables before adding foreign keys,
+The PostgreSQL adapter creates all tables before adding foreign keys,
 so relational dependencies and cycles do not require manual ordering.
 
 ## Detect drift

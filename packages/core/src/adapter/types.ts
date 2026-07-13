@@ -1,4 +1,11 @@
 import type { TableMetadata } from "../metadata/types.js";
+import type {
+  ApplyMigrationsOptions,
+  MigrationApplyResult,
+  MigrationArtifact,
+  MigrationPlan,
+  MigrationStatusEntry,
+} from "../migrations/types.js";
 
 export interface SchemaCreationOptions {
   /** Create declared foreign-key constraints when the adapter supports them. */
@@ -82,6 +89,19 @@ export interface DatabaseAdapter {
     tables: readonly TableMetadata[],
     options?: SchemaCreationOptions,
   ): Promise<SchemaCreationResult>;
+
+  planMigrations?(
+    migrations: readonly MigrationArtifact[],
+  ): Promise<MigrationPlan>;
+
+  migrationStatus?(
+    migrations: readonly MigrationArtifact[],
+  ): Promise<MigrationStatusEntry[]>;
+
+  applyMigrations?(
+    migrations: readonly MigrationArtifact[],
+    options?: ApplyMigrationsOptions,
+  ): Promise<MigrationApplyResult>;
 }
 
 export function hasFilterConstraints(filter: QueryFilter | undefined): boolean {

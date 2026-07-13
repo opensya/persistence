@@ -33,6 +33,28 @@ Tables are created with `IF NOT EXISTS`, indexes with `IF NOT EXISTS`, and
 existing foreign keys are detected before creation. Running the operation more
 than once is safe and existing data is not modified.
 
+## Migrations
+
+`PostgreAdapter` renders logical migration operations as PostgreSQL DDL and
+executes pending migrations inside a transaction.
+
+```ts
+const plan = await engine.migrations.plan(migrations)
+const result = await engine.migrations.apply(migrations)
+```
+
+Applied migrations are stored in `_opensya_migrations`. A PostgreSQL advisory
+lock prevents concurrent deployment processes from applying the same migration.
+Checksums protect applied artifacts from later modification.
+
+Destructive and irreversible plans require explicit approval:
+
+```ts
+await engine.migrations.apply(migrations, {
+  allowDestructive: true
+})
+```
+
 ## Runtime tables
 
 ```ts

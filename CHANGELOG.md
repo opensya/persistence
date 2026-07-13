@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Metadata-driven migrations.** Persistence can capture serializable schema
+  snapshots, generate deterministic migration artifacts, classify operations
+  as safe, destructive or irreversible, and expose plans before execution.
+  `PostgreAdapter` renders and applies migrations transactionally, records
+  identifiers and checksums in `_opensya_migrations`, prevents concurrent
+  runners with an advisory lock, supports dry runs and skips migrations that
+  were already applied. Migration APIs are available through
+  `engine.migrations` and the `@opensya/persistence/migrations` export.
+  Node.js filesystem helpers load ordered JSON artifacts, resolve the latest
+  schema snapshot and save migrations with numbered sequence prefixes.
+
 ## [0.4.0] - 2026-07-12
 
 ### Added
