@@ -92,8 +92,7 @@ export async function migrationsScenario(): Promise<void> {
       const tables = await adapter.introspect();
       assert.ok(
         tables.some(
-          (table) =>
-            table.collectionName === "playground_migration_records",
+          (table) => table.collectionName === "playground_migration_records",
         ),
       );
     },

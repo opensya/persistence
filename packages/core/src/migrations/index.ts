@@ -4,3 +4,4 @@ export * from "./snapshot.js";
 export * from "./differ.js";
 export * from "./errors.js";
 export * from "./manager.js";
+export * from "./loader.js";
