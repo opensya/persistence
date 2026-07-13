@@ -1073,6 +1073,8 @@ export class PostgreAdapter implements DatabaseAdapter {
         return min(column!);
       case "max":
         return max(column!);
+      case "collect":
+        return sql<unknown[]>`array_agg(${column!})`;
     }
   }
 

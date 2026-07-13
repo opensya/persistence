@@ -17,7 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Aggregate queries.** `QueryEngine.aggregate()` exposes adapter-neutral
-  `count`, `sum`, `avg`, `min` and `max` metrics with filters and grouping.
+  `count`, `sum`, `avg`, `min`, `max` and `collect` metrics with filters and
+  grouping. `collect` gathers a field from all rows in each group into an
+  adapter-native array.
   `PostgreAdapter` executes native aggregate SQL, while unsupported adapters
   fail explicitly. Metadata-aware validation rejects unknown fields, invalid
   numeric operations, alias collisions and aggregation of protected fields.

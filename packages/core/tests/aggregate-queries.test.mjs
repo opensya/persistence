@@ -64,7 +64,14 @@ test("aggregate queries validate metadata and delegate to the adapter", async ()
   const adapter = {
     aggregate: async (table, query) => {
       received = { table, query };
-      return [{ status: "paid", orderCount: 2, revenue: "42.50" }];
+      return [
+        {
+          status: "paid",
+          orderCount: 2,
+          revenue: "42.50",
+          orderIds: ["order-1", "order-2"],
+        },
+      ];
     },
   };
   const engine = createQueryEngine({ registry: createRegistry(), adapter });
@@ -73,12 +80,18 @@ test("aggregate queries validate metadata and delegate to the adapter", async ()
     metrics: {
       orderCount: { function: "count" },
       revenue: { function: "sum", field: "amount" },
+      orderIds: { function: "collect", field: "id" },
     },
   };
 
   const rows = await engine.aggregate("orders", query);
   assert.deepEqual(rows, [
-    { status: "paid", orderCount: 2, revenue: "42.50" },
+    {
+      status: "paid",
+      orderCount: 2,
+      revenue: "42.50",
+      orderIds: ["order-1", "order-2"],
+    },
   ]);
   assert.deepEqual(received, { table: "orders", query });
 

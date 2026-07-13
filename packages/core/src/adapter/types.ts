@@ -50,7 +50,13 @@ export interface QueryParams {
   orderBy?: { field: string; direction: "asc" | "desc" }[];
 }
 
-export type AggregateFunction = "count" | "sum" | "avg" | "min" | "max";
+export type AggregateFunction =
+  | "count"
+  | "sum"
+  | "avg"
+  | "min"
+  | "max"
+  | "collect";
 
 export interface AggregateMetric {
   function: AggregateFunction;

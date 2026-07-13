@@ -32,6 +32,7 @@ export async function aggregateQueriesScenario(): Promise<void> {
       groupBy: ["authorId"],
       metrics: {
         postCount: { function: "count" },
+        postIds: { function: "collect", field: "id" },
         firstPublication: { function: "min", field: "publishedAt" },
         lastPublication: { function: "max", field: "publishedAt" },
       },
@@ -43,6 +44,8 @@ export async function aggregateQueriesScenario(): Promise<void> {
     );
     assert.ok(firstAuthorRow);
     assert.equal(Number(firstAuthorRow.postCount), 2);
+    assert.ok(Array.isArray(firstAuthorRow.postIds));
+    assert.equal(firstAuthorRow.postIds.length, 2);
     assert.ok(firstAuthorRow.firstPublication instanceof Date);
     assert.ok(firstAuthorRow.lastPublication instanceof Date);
 

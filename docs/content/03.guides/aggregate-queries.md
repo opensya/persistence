@@ -21,14 +21,17 @@ const [summary] = await engine.aggregate('orders', {
     revenue: { function: 'sum', field: 'amount' },
     averageOrder: { function: 'avg', field: 'amount' },
     smallestOrder: { function: 'min', field: 'amount' },
-    largestOrder: { function: 'max', field: 'amount' }
+    largestOrder: { function: 'max', field: 'amount' },
+    orderIds: { function: 'collect', field: 'id' }
   }
 })
 ```
 
 Omitting the field from `count` produces `COUNT(*)`. The other functions
 require a field. `sum` and `avg` accept only `integer`, `bigint` and `decimal`
-metadata fields.
+metadata fields. `collect` gathers the selected field from every matching row
+into an array.
+The order of collected values is not guaranteed.
 
 The method always returns an array. Without `groupBy`, it normally contains a
 single summary row. Aggregate numeric values may be numbers, bigints or strings
@@ -42,7 +45,8 @@ const rows = await engine.aggregate('orders', {
   groupBy: ['status'],
   metrics: {
     orderCount: { function: 'count' },
-    revenue: { function: 'sum', field: 'amount' }
+    revenue: { function: 'sum', field: 'amount' },
+    users: { function: 'collect', field: 'id' }
   }
 })
 ```
@@ -52,9 +56,27 @@ metric aliases:
 
 ```ts
 [
-  { status: 'paid', orderCount: 12, revenue: '540.50' },
-  { status: 'pending', orderCount: 3, revenue: '75.00' }
+  {
+    status: 'paid',
+    orderCount: 2,
+    revenue: '540.50',
+    users: ['order-1', 'order-2']
+  },
+  {
+    status: 'pending',
+    orderCount: 1,
+    revenue: '75.00',
+    users: ['order-3']
+  }
 ]
+```
+
+The metric alias is arbitrary. In this example the `users` property contains
+the `id` value of every order in the corresponding status group. A more
+descriptive alias such as `orderIds` can be used in the same way:
+
+```ts
+orderIds: { function: 'collect', field: 'id' }
 ```
 
 Filters use the same `QueryFilter` structure as `findMany()`.
