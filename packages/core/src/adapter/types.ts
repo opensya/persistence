@@ -50,6 +50,30 @@ export interface QueryParams {
   orderBy?: { field: string; direction: "asc" | "desc" }[];
 }
 
+export type AggregateFunction = "count" | "sum" | "avg" | "min" | "max";
+
+export interface AggregateMetric {
+  function: AggregateFunction;
+  /** Optional only for count, where omission means COUNT(*). */
+  field?: string;
+}
+
+export interface AggregateQuery {
+  where?: QueryFilter;
+  groupBy?: string[];
+  metrics: Record<string, AggregateMetric>;
+}
+
+export type AggregateRow<
+  TQuery extends AggregateQuery = AggregateQuery,
+> = Record<
+  TQuery["groupBy"] extends readonly string[]
+    ? TQuery["groupBy"][number]
+    : never,
+  unknown
+> &
+  Record<keyof TQuery["metrics"], unknown>;
+
 export interface DatabaseAdapter {
   findMany<T = Record<string, unknown>>(
     table: string,
@@ -60,6 +84,12 @@ export interface DatabaseAdapter {
     table: string,
     params?: QueryParams,
   ): Promise<T | null>;
+
+  /** Optional native aggregation capability. */
+  aggregate?(
+    table: string,
+    query: AggregateQuery,
+  ): Promise<AggregateRow[]>;
 
   insert<T = Record<string, unknown>>(
     table: string,

@@ -1,4 +1,6 @@
 import type {
+  AggregateQuery,
+  AggregateRow,
   DatabaseAdapter,
   QueryFilter,
   QueryParams,
@@ -22,6 +24,8 @@ import { SchemaManager } from "../sync/schema-manager.js";
 import { FieldSerializer } from "./serializer.js";
 import { CursorCodec } from "./cursor.js";
 import {
+  AggregateQueriesNotSupportedError,
+  InvalidAggregateQueryError,
   OptimisticLockError,
   OptimisticLockVersionRequiredError,
   UnsafeMutationError,
@@ -222,6 +226,23 @@ export class QueryEngine<
       populated,
       context,
     ) as Promise<ResolveEntityType<T, TTables, TName>>;
+  }
+
+  async aggregate<
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+    const TQuery extends AggregateQuery = AggregateQuery,
+  >(
+    tableName: TName,
+    query: TQuery,
+  ): Promise<AggregateRow<TQuery>[]> {
+    const table = this.registry.getOrThrow(tableName);
+    if (!this.adapter.aggregate) {
+      throw new AggregateQueriesNotSupportedError();
+    }
+    this.assertValidAggregateQuery(table, query);
+    return this.adapter.aggregate(tableName, query) as Promise<
+      AggregateRow<TQuery>[]
+    >;
   }
 
   create<
@@ -527,6 +548,73 @@ export class QueryEngine<
           : column.default;
     }
     return result;
+  }
+
+  private assertValidAggregateQuery(
+    table: TableMetadata,
+    query: AggregateQuery,
+  ): void {
+    const metrics = Object.entries(query.metrics);
+    if (!metrics.length) {
+      throw new InvalidAggregateQueryError("at least one metric is required.");
+    }
+
+    const columns = new Map(table.columns.map((column) => [column.name, column]));
+    const groupBy = query.groupBy ?? [];
+    if (new Set(groupBy).size !== groupBy.length) {
+      throw new InvalidAggregateQueryError("groupBy fields must be unique.");
+    }
+
+    for (const field of groupBy) {
+      const column = columns.get(field);
+      if (!column) {
+        throw new InvalidAggregateQueryError(`unknown groupBy field "${field}".`);
+      }
+      if (column.hidden || column.visibility) {
+        throw new InvalidAggregateQueryError(
+          `protected field "${field}" cannot be grouped.`,
+        );
+      }
+    }
+
+    for (const [alias, metric] of metrics) {
+      if (!alias.trim()) {
+        throw new InvalidAggregateQueryError("metric aliases cannot be empty.");
+      }
+      if (groupBy.includes(alias)) {
+        throw new InvalidAggregateQueryError(
+          `metric alias "${alias}" conflicts with a groupBy field.`,
+        );
+      }
+      if (!metric.field) {
+        if (metric.function !== "count") {
+          throw new InvalidAggregateQueryError(
+            `${metric.function} metric "${alias}" requires a field.`,
+          );
+        }
+        continue;
+      }
+
+      const column = columns.get(metric.field);
+      if (!column) {
+        throw new InvalidAggregateQueryError(
+          `metric "${alias}" references unknown field "${metric.field}".`,
+        );
+      }
+      if (column.hidden || column.visibility) {
+        throw new InvalidAggregateQueryError(
+          `metric "${alias}" references protected field "${metric.field}".`,
+        );
+      }
+      if (
+        (metric.function === "sum" || metric.function === "avg") &&
+        !["integer", "bigint", "decimal"].includes(column.type)
+      ) {
+        throw new InvalidAggregateQueryError(
+          `${metric.function} metric "${alias}" requires a numeric field.`,
+        );
+      }
+    }
   }
 
   private initializeOptimisticLock(

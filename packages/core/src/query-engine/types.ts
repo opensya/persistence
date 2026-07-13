@@ -45,6 +45,20 @@ export class OptimisticLockError extends Error {
   }
 }
 
+export class AggregateQueriesNotSupportedError extends Error {
+  constructor() {
+    super("The active database adapter does not support aggregate queries.");
+    this.name = "AggregateQueriesNotSupportedError";
+  }
+}
+
+export class InvalidAggregateQueryError extends Error {
+  constructor(message: string) {
+    super(`Invalid aggregate query: ${message}`);
+    this.name = "InvalidAggregateQueryError";
+  }
+}
+
 export class InvalidCursorError extends Error {
   constructor(message = "Invalid pagination cursor.") {
     super(message);
