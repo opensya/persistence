@@ -651,14 +651,21 @@ export class TransactionalQueryEngine<
 export function createQueryEngine<
   TEvents extends object = Record<string, unknown>,
   TTables extends TableMetadataMap = Record<never, never>,
->(
-  registry: MetadataRegistry<TTables>,
-  adapter: DatabaseAdapter,
-  hooks?: HooksRegistry,
-  serializer?: FieldSerializer,
-  audit?: AuditManager,
-  outbox?: OutboxWriter,
-): QueryEngine<TEvents, TTables> {
+>({
+  registry,
+  adapter,
+  hooks,
+  serializer,
+  audit,
+  outbox,
+}: {
+  registry: MetadataRegistry<TTables>;
+  adapter: DatabaseAdapter;
+  hooks?: HooksRegistry;
+  serializer?: FieldSerializer;
+  audit?: AuditManager;
+  outbox?: OutboxWriter;
+}): QueryEngine<TEvents, TTables> {
   return new QueryEngine<TEvents, TTables>(
     registry,
     adapter,

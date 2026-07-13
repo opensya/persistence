@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `createQueryEngine()` now accepts a named options object containing
+  `registry`, `adapter`, `hooks`, `serializer`, `audit` and `outbox`. This
+  replaces the positional signature and makes optional dependency injection
+  explicit and less error-prone.
+
 ### Added
 
 - **Metadata-driven migrations.** Persistence can capture serializable schema

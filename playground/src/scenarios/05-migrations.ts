@@ -62,7 +62,7 @@ export async function migrationsScenario(): Promise<void> {
         migrationRecordsMetadata,
       );
       registry.lock();
-      const migrationEngine = createQueryEngine(registry, adapter);
+      const migrationEngine = createQueryEngine({ registry, adapter });
       const migration = migrationEngine.migrations.generate({
         name: "add migration records",
         previous,

@@ -53,14 +53,13 @@ export async function createPlayground() {
     createDatabaseAuditWriter(auditLogsMetadata.name),
   );
   const outbox = createDatabaseOutboxWriter(outboxEventsMetadata.name);
-  const engine = createQueryEngine(
+  const engine = createQueryEngine({
     registry,
     adapter,
     hooks,
-    undefined,
     audit,
     outbox,
-  );
+  });
   const schemaCreation = await engine.schema.createTables();
 
   return {
