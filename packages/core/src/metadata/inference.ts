@@ -61,6 +61,15 @@ export type InferTableEntity<TTable extends TableMetadata> = Simplify<
   RequiredEntityFields<TTable> & ConditionalEntityFields<TTable>
 >;
 
+type InternalEntityFields<TTable extends TableMetadata> = {
+  -readonly [TColumn in TableColumn<TTable> as TColumn["name"]]: InferColumnValue<TColumn>;
+};
+
+/** Infers the complete, unserialized entity available to internal reads. */
+export type InferInternalTableEntity<TTable extends TableMetadata> = Simplify<
+  InternalEntityFields<TTable>
+>;
+
 export type RegisteredTableName<TTables extends TableMetadataMap> =
   Extract<keyof TTables, string> extends never
     ? string
@@ -75,12 +84,29 @@ export type InferRegisteredEntity<
     : Record<string, unknown>
   : Record<string, unknown>;
 
+export type InferRegisteredInternalEntity<
+  TTables extends TableMetadataMap,
+  TName extends string,
+> = TName extends keyof TTables
+  ? TTables[TName] extends TableMetadata
+    ? InferInternalTableEntity<TTables[TName]>
+    : Record<string, unknown>
+  : Record<string, unknown>;
+
 export type ResolveEntityType<
   TExplicit,
   TTables extends TableMetadataMap,
   TName extends string,
 > = [TExplicit] extends [never]
   ? InferRegisteredEntity<TTables, TName>
+  : TExplicit;
+
+export type ResolveInternalEntityType<
+  TExplicit,
+  TTables extends TableMetadataMap,
+  TName extends string,
+> = [TExplicit] extends [never]
+  ? InferRegisteredInternalEntity<TTables, TName>
   : TExplicit;
 
 /** Declares a compile-time-only type without creating a runtime value. */
