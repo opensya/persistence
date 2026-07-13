@@ -15,6 +15,7 @@ import type { MetadataRegistry } from "../metadata/registry.js";
 import type {
   RegisteredTableName,
   ResolveEntityType,
+  ResolveInternalEntityType,
   TableMetadataMap,
 } from "../metadata/inference.js";
 import type { ColumnMetadata, TableMetadata } from "../metadata/types.js";
@@ -39,6 +40,8 @@ export interface EngineQueryParams extends QueryParams {
   context?: QueryContextInput;
 }
 
+export type InternalEngineQueryParams = Omit<EngineQueryParams, "context">;
+
 export interface CursorPaginationParams
   extends Omit<EngineQueryParams, "limit" | "offset"> {
   first?: number;
@@ -55,12 +58,80 @@ export interface CursorPage<T> {
   pageInfo: CursorPageInfo;
 }
 
+/**
+ * Explicitly bypasses field serialization for trusted application internals.
+ * Never expose its results directly through an API response.
+ */
+export class InternalQueryEngine<
+  TTables extends TableMetadataMap = Record<never, never>,
+> {
+  constructor(
+    private readonly registry: MetadataRegistry<TTables>,
+    private readonly adapter: DatabaseAdapter,
+  ) {}
+
+  async findMany<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
+    params: InternalEngineQueryParams = {},
+  ): Promise<ResolveInternalEntityType<T, TTables, TName>[]> {
+    this.registry.getOrThrow(tableName);
+    const { populate, ...query } = params;
+    const rows = await this.adapter.findMany<Record<string, unknown>>(
+      tableName,
+      query,
+    );
+    const populated = populate?.length
+      ? await new RelationResolver(this.registry, this.adapter).populate(
+          tableName,
+          rows,
+          populate,
+        )
+      : rows;
+
+    return populated as ResolveInternalEntityType<T, TTables, TName>[];
+  }
+
+  async findOne<
+    T = never,
+    TName extends RegisteredTableName<TTables> = RegisteredTableName<TTables>,
+  >(
+    tableName: TName,
+    params: InternalEngineQueryParams = {},
+  ): Promise<ResolveInternalEntityType<T, TTables, TName> | null> {
+    this.registry.getOrThrow(tableName);
+    const { populate, ...query } = params;
+    const row = await this.adapter.findOne<Record<string, unknown>>(
+      tableName,
+      query,
+    );
+    if (!row) return null;
+
+    if (!populate?.length) {
+      return row as ResolveInternalEntityType<T, TTables, TName>;
+    }
+    const [populated] = await new RelationResolver(
+      this.registry,
+      this.adapter,
+    ).populate(tableName, [row], populate);
+
+    return (populated ?? row) as ResolveInternalEntityType<
+      T,
+      TTables,
+      TName
+    >;
+  }
+}
+
 export class QueryEngine<
   TEvents extends object = Record<string, unknown>,
   TTables extends TableMetadataMap = Record<never, never>,
 > {
   readonly schema: SchemaManager;
   readonly migrations: MigrationManager;
+  readonly internal: InternalQueryEngine<TTables>;
 
   constructor(
     private readonly registry: MetadataRegistry<TTables>,
@@ -73,6 +144,7 @@ export class QueryEngine<
   ) {
     this.schema = new SchemaManager(registry, adapter);
     this.migrations = new MigrationManager(registry, adapter);
+    this.internal = new InternalQueryEngine(registry, adapter);
   }
 
   transaction<TResult>(

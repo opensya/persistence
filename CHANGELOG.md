@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Added
+
+- **Trusted internal reads.** `engine.internal.findOne()` and `findMany()`
+  bypass field serialization for authentication and other trusted application
+  services that need hidden or dynamically visible fields. Internal results
+  retain metadata-driven type inference, including protected columns, and can
+  populate relations. Public Query Engine reads remain serialized by default.
 
 ## [0.5.0] - 2026-07-13
 

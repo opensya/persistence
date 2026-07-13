@@ -22,6 +22,13 @@ export async function crudAndValidationScenario(): Promise<void> {
       assert.equal(created.preferences.notifications, true);
       assert.equal("secret" in created, false);
 
+      const internalUser = await engine.internal.findOne("users", {
+        where: {
+          conditions: [{ field: "id", operator: "eq", value: created.id }],
+        },
+      });
+      assert.equal(internalUser?.secret, "not-returned");
+
       const found = await engine.findOne("users", {
         where: {
           conditions: [{ field: "id", operator: "eq", value: created.id }],
