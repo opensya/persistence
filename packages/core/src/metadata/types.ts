@@ -39,6 +39,21 @@ export type FieldVisibilityResolver = (
   ctx: FieldVisibilityContext,
 ) => boolean | Promise<boolean>;
 
+export interface FieldTransformContext {
+  operation: "create" | "update";
+  field: string;
+  table: string;
+  entity: Readonly<Record<string, unknown>>;
+  user: unknown;
+  requestId?: string;
+  tenantId?: string;
+}
+
+export type FieldTransformer = (
+  value: unknown,
+  ctx: FieldTransformContext,
+) => unknown | Promise<unknown>;
+
 export interface ColumnMetadata {
   name: string;
   columnName: string;
@@ -48,6 +63,12 @@ export interface ColumnMetadata {
   unique: boolean;
   default?: unknown | (() => unknown);
   validators: FieldValidatorMetadata[];
+  /**
+   * Transforms a supplied value after validation and lifecycle `before` hooks,
+   * immediately before it is sent to the database adapter. On updates, the
+   * transformer runs only when this field is present in the patch.
+   */
+  transform?: FieldTransformer;
   /**
    * When true, the field is always stripped from query results — it still
    * exists in the database and can still be written to. Takes precedence

@@ -243,10 +243,16 @@ export class QueryEngine<
 
       this.assertKnownFields(table, resolved);
       await this.assertValid(table, resolved);
+      const transformed = await this.transformFields(
+        table,
+        resolved,
+        "create",
+        context,
+      );
 
       const entity = await tx.insert<Record<string, unknown>>(
         tableName,
-        resolved,
+        transformed,
       );
       await this.hooks.runAfterCreate(tableName, entity, hookContext);
       await this.audit?.record({
@@ -293,12 +299,18 @@ export class QueryEngine<
 
       const merged = { ...current, ...resolvedPatch };
       await this.assertValid(table, merged, Object.keys(resolvedPatch));
+      const transformedPatch = await this.transformFields(
+        table,
+        resolvedPatch,
+        "update",
+        context,
+      );
 
       const primaryKeyFilter = this.createPrimaryKeyFilter(table, current);
       const [updated] = await tx.update<Record<string, unknown>>(
         tableName,
         primaryKeyFilter,
-        resolvedPatch,
+        transformedPatch,
       );
       if (!updated) return null;
 
@@ -356,11 +368,17 @@ export class QueryEngine<
           touchedFields,
         );
       }
+      const transformedPatch = await this.transformFields(
+        table,
+        resolvedPatch,
+        "update",
+        context,
+      );
 
       const updatedRows = await tx.update<Record<string, unknown>>(
         tableName,
         where,
-        resolvedPatch,
+        transformedPatch,
       );
       for (const updated of updatedRows) {
         await this.hooks.runAfterUpdate(tableName, updated, hookContext);
@@ -465,6 +483,33 @@ export class QueryEngine<
           ? await column.default()
           : column.default;
     }
+    return result;
+  }
+
+  private async transformFields(
+    table: TableMetadata,
+    data: Record<string, unknown>,
+    operation: "create" | "update",
+    context: QueryContextInput,
+  ): Promise<Record<string, unknown>> {
+    const result = { ...data };
+
+    for (const column of table.columns) {
+      if (!column.transform || !(column.name in data)) continue;
+
+      result[column.name] = await column.transform(data[column.name], {
+        operation,
+        field: column.name,
+        table: table.name,
+        entity: data,
+        user: context.user,
+        ...(context.requestId !== undefined && {
+          requestId: context.requestId,
+        }),
+        ...(context.tenantId !== undefined && { tenantId: context.tenantId }),
+      });
+    }
+
     return result;
   }
 

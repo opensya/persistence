@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Columns can declare an asynchronous `transform(value, context)` function.
+  It runs after input validation and `before` lifecycle hooks, immediately
+  before create or update data reaches the adapter. Updates transform only
+  fields present in the patch, enabling use cases such as password hashing,
+  encryption and normalization without affecting stored values on unrelated
+  updates.
+
+### Added
+
 - **Metadata-driven migrations.** Persistence can capture serializable schema
   snapshots, generate deterministic migration artifacts, classify operations
   as safe, destructive or irreversible, and expose plans before execution.
