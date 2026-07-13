@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Typed JSON columns.** JSON metadata can declare
+  `$type: like<Shape>()`, which is preserved by `defineTable()` and used by
+  entity inference without creating a runtime value. Adapters ignore it,
+  nullable fields retain `null`, and JSON columns without `$type` remain
+  `unknown` for backward compatibility.
 - **Aggregate queries.** `QueryEngine.aggregate()` exposes adapter-neutral
   `count`, `sum`, `avg`, `min`, `max` and `collect` metrics with filters and
   grouping. `collect` gathers a field from all rows in each group into an

@@ -58,6 +58,11 @@ export interface ColumnMetadata {
   name: string;
   columnName: string;
   type: ColumnType;
+  /**
+   * Optional compile-time value used to infer the shape of a JSON column.
+   * It is ignored by adapters and has no effect on runtime persistence.
+   */
+  $type?: unknown;
   nullable: boolean;
   primaryKey: boolean;
   unique: boolean;

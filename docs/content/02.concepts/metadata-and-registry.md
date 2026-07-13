@@ -58,7 +58,7 @@ Logical names are used by the engine; physical names are used by the adapter.
 | `boolean` | `boolean` |
 | `timestamp` | `Date` |
 | `decimal` | `string \| number` |
-| `json` | `unknown` |
+| `json` | `$type` when declared, otherwise `unknown` |
 
 A nullable column becomes `T | null`. `hidden: true` removes the field from the
 inferred result. A field using a dynamic `visibility` resolver becomes optional.
@@ -66,6 +66,36 @@ inferred result. A field using a dynamic `visibility` resolver becomes optional.
 ```ts
 type User = InferTableEntity<typeof users>
 ```
+
+### Typed JSON fields
+
+Use the compile-time-only `$type` property when the structure of a JSON field
+is known:
+
+```ts
+import { like } from '@opensya/persistence'
+
+interface UserPreferences {
+  theme: 'light' | 'dark' | 'system'
+  notifications: boolean
+}
+
+{
+  name: 'preferences',
+  columnName: 'preferences',
+  type: 'json',
+  $type: like<UserPreferences>(),
+  nullable: false,
+  primaryKey: false,
+  unique: false,
+  validators: []
+}
+```
+
+The inferred entity now exposes `preferences` as `UserPreferences`. `$type`
+does not validate JSON at runtime and is ignored by database adapters; use a
+validator when untrusted input must be checked. Nullable JSON fields infer
+`UserPreferences | null`. Omitting `$type` preserves the default `unknown`.
 
 ## Defaults and validators
 
