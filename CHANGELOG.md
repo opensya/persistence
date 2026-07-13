@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.5.0] - 2026-07-13
+
 ### Changed
 
 - `createQueryEngine()` now accepts a named options object containing
@@ -40,8 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   fields present in the patch, enabling use cases such as password hashing,
   encryption and normalization without affecting stored values on unrelated
   updates.
-
-### Added
 
 - **Metadata-driven migrations.** Persistence can capture serializable schema
   snapshots, generate deterministic migration artifacts, classify operations
